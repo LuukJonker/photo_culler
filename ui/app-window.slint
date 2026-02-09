@@ -1,0 +1,111 @@
+import { Slider, VerticalBox, HorizontalBox, GroupBox, LineEdit, StandardButton, ComboBox, Button } from "std-widgets.slint";
+
+// Define the modern color palette
+export global Theme  {
+    out property <color> background: #1e1e1e;
+    out property <color> sidebar: #2d2d2d;
+    out property <color> text: #ffffff;
+    out property <color> accent: #007acc;
+}
+
+// This is the main application window definition
+export component AppWindow inherits Window {
+    title: "Photo Culler Pro";
+    min-width: 800px;
+    min-height: 600px;
+    background: Theme.background;
+
+    // --- RUST INTERFACE ---
+    // These properties act as the bridge between Slint and Rust.
+    // 'in-out' means both sides can read and write to them.
+    in-out property <float> brightness_val: 1.0;
+    in-out property <float> contrast_val: 1.0;
+    in-out property <string> current_filename: "DSC0001.ARW";
+
+    in property <image> current_image;
+
+    // Main layout: Left Image area + Right Sidebar
+    HorizontalBox {
+        padding: 0px;
+        spacing: 0px;
+
+        // --- LEFT: Main Image View Area ---
+        Rectangle {
+            background: black;
+            // This is a placeholder. In a real app, you'd render the image here.
+            // We simulate brightness changes by changing the rectangle color.
+            // The `* root.brightness_val` makes it react instantly to slider changes.
+            Image {
+                source: root.current_image;
+                width: 100%;
+                height: 100%;
+            }
+        }
+
+        // --- RIGHT: Sidebar Controls ---
+        Rectangle {
+            width: 250px;
+            background: Theme.sidebar;
+
+            VerticalBox {
+                padding: 15px;
+                alignment: start;
+
+                Text {
+                    text: "Develop Settings";
+                    color: Theme.text;
+                    font-weight: 700;
+                    font-size: 16px;
+                }
+
+                // Spacing
+                Rectangle { height: 20px; }
+
+                GroupBox {
+                   title: "Tone";
+
+                   VerticalBox {
+                       spacing: 10px;
+                       Text {
+                           // Show the exact numerical value
+                           text: "Brightness: " + SlintUtils.float_to_string(root.brightness_val, 2);
+                           color: Theme.text;
+                       }
+                       Slider {
+                           value <=> root.brightness_val; // Two-way binding!
+                           minimum: 0.5;
+                           maximum: 1.5;
+                       }
+
+                       Text {
+                           text: "Contrast: " + SlintUtils.float_to_string(root.contrast_val, 2);
+                           color: Theme.text;
+                       }
+                       Slider {
+                           value <=> root.contrast_val; // Two-way binding!
+                           minimum: 0.8;
+                           maximum: 1.2;
+                       }
+                   }
+                }
+
+                // Spacing
+                Rectangle { height: 20px; }
+
+                // Example of a button connecting to Rust logic
+                Button {
+                    text: "Export Selected";
+                    primary: true;
+                    // Ensure the button uses our theme accent color
+                    // (Slint standard widgets sometimes need manual styling overrides)
+                    height: 35px;
+                }
+            }
+        }
+    }
+}
+
+// A little helper global to format floats nicely in the UI
+global SlintUtils {
+    pure callback float_to_string(float, int) -> string;
+}
