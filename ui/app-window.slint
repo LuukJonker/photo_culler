@@ -1,4 +1,4 @@
-import { Slider, VerticalBox, HorizontalBox, GroupBox, LineEdit, StandardButton, ComboBox, Button } from "std-widgets.slint";
+import { Slider, VerticalBox, HorizontalBox, GroupBox, LineEdit, StandardButton, ComboBox, Button, ListView } from "std-widgets.slint";
 
 // Define the modern color palette
 export global Theme  {
@@ -18,27 +18,58 @@ export component AppWindow inherits Window {
     // --- RUST INTERFACE ---
     // These properties act as the bridge between Slint and Rust.
     // 'in-out' means both sides can read and write to them.
-    in-out property <float> brightness_val: 1.0;
+    in-out property <float> brightness_val: 0;
     in-out property <float> contrast_val: 1.0;
     in-out property <string> current_filename: "DSC0001.ARW";
 
     in property <image> current_image;
+    in property <[image]> filmstrip_images;
+
+    // Callbacks
+    callback next_photo();
+    callback prev_photo();
+    callback settings_changed(float, float);
+
+    // Keyboard handler
+    FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.RightArrow) {
+                root.next_photo();
+                return accept;
+            }
+            if (event.text == Key.LeftArrow) {
+                root.prev_photo();
+                return accept;
+            }
+            return reject;
+        }
+
 
     // Main layout: Left Image area + Right Sidebar
     HorizontalBox {
         padding: 0px;
         spacing: 0px;
 
-        // --- LEFT: Main Image View Area ---
-        Rectangle {
-            background: black;
-            // This is a placeholder. In a real app, you'd render the image here.
-            // We simulate brightness changes by changing the rectangle color.
-            // The `* root.brightness_val` makes it react instantly to slider changes.
-            Image {
-                source: root.current_image;
-                width: 100%;
-                height: 100%;
+        VerticalBox {
+            // --- LEFT: Main Image View Area ---
+            Rectangle {
+                background: black;
+                height: 80%;
+                // This is a placeholder. In a real app, you'd render the image here.
+                // We simulate brightness changes by changing the rectangle color.
+                // The `* root.brightness_val` makes it react instantly to slider changes.
+                Image {
+                    source: root.current_image;
+                    width: 100%;
+                    height: 100%;
+                }
+            }
+
+            ListView {
+                for image in root.filmstrip_images:
+                    Image {
+                        source: image;
+                    }
             }
         }
 
@@ -75,6 +106,9 @@ export component AppWindow inherits Window {
                            value <=> root.brightness_val; // Two-way binding!
                            minimum: 0.5;
                            maximum: 1.5;
+                           changed(value) => {
+                                settings_changed(value, root.contrast_val);
+                           }
                        }
 
                        Text {
@@ -103,6 +137,7 @@ export component AppWindow inherits Window {
             }
         }
     }
+    } // Close FocusScope
 }
 
 // A little helper global to format floats nicely in the UI

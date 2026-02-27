@@ -7,7 +7,9 @@ edition = "2024"
 byteorder = "1.5.0"
 image = "0.25.9"
 kamadak-exif = "0.6.1"
+rawloader = "0.37.1"
 slint = "1.15"
+thiserror = "2.0.18"
 
 
 [build-dependencies]
