@@ -1,7 +1,8 @@
 use crate::model::image_container::{ImageContainer, ImageSettings};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
-use std::fs::{self, DirEntry};
+use std::fs;
 use std::path::{Path, PathBuf};
+use crate::error::ModelError;
 
 pub struct ImageBrowser {
     // Path to the root folder
@@ -28,20 +29,22 @@ impl ImageBrowser {
     pub fn new(folder_path: PathBuf) -> Self {
         let entries = get_all_files(&folder_path);
 
-        println!(
-            "Loaded from {:?}, got {} images",
-            folder_path,
-            entries.len()
-        );
-
         Self {
             images: entries,
             root_folder: folder_path,
         }
     }
 
-    pub fn preview_at_index(&self, index: usize) -> SharedPixelBuffer<Rgb8Pixel> {
+    pub fn len(&self) -> usize {
+        self.images.len()
+    }
+
+    pub fn preview_at_index(&self, index: usize) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         self.images[index].get_full_preview()
+    }
+
+    pub fn thumbnail_at_index(&self, index: usize) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
+        self.images[index].get_thumbnail()
     }
 
     pub fn settings_at_index(&self, index: usize) -> ImageSettings {

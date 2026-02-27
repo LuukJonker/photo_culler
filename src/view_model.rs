@@ -1,4 +1,4 @@
-use slint::Weak;
+use slint::{Image, ModelRc, Weak};
 
 use crate::commands::{Request, Commands};
 use crate::model::image_container::ImageSettings;

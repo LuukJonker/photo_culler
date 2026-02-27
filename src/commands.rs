@@ -34,7 +34,7 @@ impl Commands {
 pub enum Commands {
     LoadPhoto(u32),
     LoadDirectory(String),
-    LoadFilmstrip,
+    LoadThumbnail(u32),
 
     AdjustImagesettings(u32, ImageSettings),
 }
@@ -48,7 +48,8 @@ pub struct Response {
 }
 
 pub enum ResponseData {
-    LoadedDirectory,
+    LoadedDirectory(u32),
     LoadedPhoto(SharedPixelBuffer<Rgb8Pixel>, ImageSettings),
     SettingsForPhoto(u32, ImageSettings),
+    LoadedPreview(SharedPixelBuffer<Rgb8Pixel>),
 }

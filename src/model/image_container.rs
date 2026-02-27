@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::error::ModelError;
 use exif::{Exif, Field};
 use image::DynamicImage;
 use rawloader::RawImage;
@@ -35,7 +36,7 @@ pub struct ImageContainer {
     settings: ImageSettings,
 }
 
-fn load_compressed_image(path: &Path) -> Result<image::DynamicImage, Box<dyn Error>> {
+fn load_compressed_image(path: &Path) -> Result<image::DynamicImage, ModelError> {
     let img = image::ImageReader::open(path)?.decode()?;
 
     Ok(img)
@@ -70,23 +71,21 @@ impl ImageContainer {
         }
     }
 
-    pub fn get_full_preview(&self) -> SharedPixelBuffer<Rgb8Pixel> {
+    pub fn get_full_preview(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         if let Some(cached) = self.cached_preview.borrow().as_ref() {
-            return cached.clone();
+            return Ok(cached.clone());
         }
 
-        let image = dynamic_image_to_slint_image(load_compressed_image(&self.path).unwrap());
+        let image = dynamic_image_to_slint_image(load_compressed_image(&self.path)?);
         self.cached_preview.replace(Some(image.clone()));
 
-        image
+        Ok(image)
     }
 
-    pub fn get_thumbnail(&self) -> SharedPixelBuffer<Rgb8Pixel> {
-        dynamic_image_to_slint_image(
-            load_compressed_image(&self.path)
-                .unwrap()
-                .thumbnail(300, 300),
-        )
+    pub fn get_thumbnail(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
+        Ok(dynamic_image_to_slint_image(
+            load_compressed_image(&self.path)?.thumbnail(300, 300),
+        ))
     }
 
     // Image settings

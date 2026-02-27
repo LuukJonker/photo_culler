@@ -37,12 +37,22 @@ impl Model {
         let browser = self
             .browser
             .as_ref()
-            .ok_or(ModelError::PhotoNotFound)?;
+            .unwrap();
 
-        let image = browser.preview_at_index(index as usize);
+        let image = browser.preview_at_index(index as usize)?;
         let settings = browser.settings_at_index(index as usize);
 
         Ok(ResponseData::LoadedPhoto(image, settings))
+    }
+
+    fn load_preview(&self, index: u32) -> Result<ResponseData, ModelError> {
+        let browser = self
+            .browser
+            .as_ref().unwrap();
+
+        let image = browser.thumbnail_at_index(index as usize)?;
+
+        Ok(ResponseData::LoadedPreview(image))
     }
 
     fn event_loop(mut self) {
@@ -55,7 +65,7 @@ impl Model {
                 Commands::LoadDirectory(path) => {
                     self.browser = Some(ImageBrowser::new(path.into()));
 
-                    self.load_photo(0)
+                    Ok(ResponseData::LoadedDirectory(self.browser.as_ref().unwrap().len() as u32))
                 },
 
                 Commands::AdjustImagesettings(id, settings) => {
@@ -65,8 +75,9 @@ impl Model {
                     continue;
                 },
 
-                Commands::LoadFilmstrip => {
-                    todo!()
+                Commands::LoadThumbnail(index) => {
+                    println!("Load thumbnail request");
+                    self.load_preview(*index)
                 }
             };
 

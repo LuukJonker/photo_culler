@@ -1,4 +1,4 @@
-import { Slider, VerticalBox, HorizontalBox, GroupBox, LineEdit, StandardButton, ComboBox, Button, ListView } from "std-widgets.slint";
+import { Slider, VerticalBox, HorizontalBox, GroupBox, LineEdit, StandardButton, ComboBox, Button, ListView, ScrollView } from "std-widgets.slint";
 
 // Define the modern color palette
 export global Theme  {
@@ -65,11 +65,25 @@ export component AppWindow inherits Window {
                 }
             }
 
-            ListView {
-                for image in root.filmstrip_images:
-                    Image {
-                        source: image;
-                    }
+            ScrollView {
+                height: 20%;
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    for image in root.filmstrip_images:
+                        Rectangle {
+                            background: #444444;
+                            height: 100%;
+                            width: 100px;
+
+                            Image {
+                                source: image;
+                                width: 100%;
+                                height: 100%;
+                                image-fit: contain;
+                            }
+                        }
+                }
             }
         }
 

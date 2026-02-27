@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // All the objects for the different parts of the program
     let model = Model::new(response_sender);
     let vm = ViewModel::new(model.get_sender_inst())?;
-    let listener = ResponseListener::new(response_receiver, vm.get_ui_handle(), vm.get_appstate());
+    let listener = ResponseListener::new(model.get_sender_inst(), response_receiver, vm.get_ui_handle(), vm.get_appstate());
 
     model.get_sender_inst().send(Commands::LoadDirectory(
         "/home/luuk/Pictures/Screenshots/".into(),
