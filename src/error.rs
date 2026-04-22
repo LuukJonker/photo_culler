@@ -11,6 +11,9 @@ pub enum ModelError {
     #[error("Directory was not found")]
     DirectoryNotFound,
 
+    #[error("{0}")]
+    WithMessage(String),
+
     #[error("Undefined error")]
     Undefined,
 }

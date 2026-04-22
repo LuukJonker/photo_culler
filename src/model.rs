@@ -1,91 +1,159 @@
-use std::sync::mpsc::{Receiver, Sender, channel};
-use std::thread;
-
-mod image_browser;
+pub mod image_browser;
 pub mod image_container;
+mod worker;
 
-use crate::commands::{Commands, Request, Response, ResponseData};
-use crate::error::ModelError;
+use std::sync::{Arc, RwLock};
+use std::thread::JoinHandle;
+use std::{cmp::Ordering, collections::BinaryHeap, thread};
+
+use crate::commands::{Priority, Request, Response};
 use crate::model::image_browser::ImageBrowser;
+use crate::model::worker::Worker;
+use crossbeam::channel::{Receiver, Select, Sender, bounded, unbounded};
+
+struct RequestWithPriority {
+    request: Request,
+    priority: Priority,
+}
+
+impl RequestWithPriority {
+    fn new(request: Request) -> Self {
+        Self {
+            priority: request.priority(),
+            request,
+        }
+    }
+}
+
+/// Still have to figure out how this works with the eq
+///
+impl Eq for RequestWithPriority {}
+
+impl PartialEq for RequestWithPriority {
+    fn eq(&self, other: &Self) -> bool {
+        self.priority == other.priority
+    }
+}
+
+impl PartialOrd for RequestWithPriority {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RequestWithPriority {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.priority.cmp(&other.priority)
+    }
+}
+
+///
+
+#[derive(Clone, Default)]
+pub struct ModelState {
+    pub browser: Arc<RwLock<Option<ImageBrowser>>>,
+}
 
 pub struct Model {
-    sender: Sender<Request>,
-    receiver: Receiver<Request>,
+    // Channel for the incoming job requests from the view model
+    incoming_sender: Sender<Request>,
+    incoming_receiver: Receiver<Request>,
 
-    response_sender: Sender<Response>,
+    // Channel for sending the job requests to the workers
+    outgoing_sender: Sender<Request>,
+    outgoing_receiver: Receiver<Request>,
 
-    browser: Option<ImageBrowser>,
+    // Workers
+    worker_handles: Vec<JoinHandle<()>>,
+
+    // Priority queue for the requests
+    queue: BinaryHeap<RequestWithPriority>,
+
+    // The state of the model
+    state: ModelState,
 }
 
 impl Model {
-    pub fn new(response_sender: Sender<Response>) -> Model {
-        let (sender, receiver) = channel::<Request>();
+    pub fn new() -> Self {
+        // Incoming and outgoing channels, for dev purposes
+        let (incoming_sender, incoming_receiver) = unbounded::<Request>();
+        let (outgoing_sender, outgoing_receiver) = bounded::<Request>(0);
 
-        Model {
-            sender,
-            receiver,
-            response_sender,
-            browser: None,
+        Self {
+            incoming_sender,
+            incoming_receiver,
+            outgoing_sender,
+            outgoing_receiver,
+
+            worker_handles: Vec::new(),
+            queue: BinaryHeap::new(),
+
+            state: ModelState::default(),
         }
     }
 
-    pub fn get_sender_inst(&self) -> Sender<Request> {
-        self.sender.clone()
+    pub fn get_sender(&self) -> Sender<Request> {
+        self.incoming_sender.clone()
     }
 
-    fn load_photo(&self, index: u32) -> Result<ResponseData, ModelError> {
-        let browser = self
-            .browser
-            .as_ref()
-            .unwrap();
-
-        let image = browser.preview_at_index(index as usize)?;
-        let settings = browser.settings_at_index(index as usize);
-
-        Ok(ResponseData::LoadedPhoto(image, settings))
+    pub fn get_receiver(&self) -> Receiver<Request> {
+        self.outgoing_receiver.clone()
     }
 
-    fn load_preview(&self, index: u32) -> Result<ResponseData, ModelError> {
-        let browser = self
-            .browser
-            .as_ref().unwrap();
+    fn inner(mut self) {
+        loop {
+            // Rebuild the selector every iteration
+            let mut sel = Select::new(); // Can use biased selector to make sure jobs are handed out first
 
-        let image = browser.thumbnail_at_index(index as usize)?;
+            // 1. Always listen for incoming requests
+            let incoming_oper = sel.recv(&self.incoming_receiver);
 
-        Ok(ResponseData::LoadedPreview(image))
-    }
+            // 2. Only attempt to send IF we have something in the queue
+            let mut outgoing_oper = None;
+            if self.queue.peek().is_some() {
+                outgoing_oper = Some(sel.send(&self.outgoing_sender));
+            }
 
-    fn event_loop(mut self) {
-        for msg in &self.receiver {
-            let cmd = &msg.command;
+            // 3. Block until one of the registered operations is ready
+            let oper = sel.select();
 
-            let return_value = match cmd {
-                Commands::LoadPhoto(id) => self.load_photo(*id),
-
-                Commands::LoadDirectory(path) => {
-                    self.browser = Some(ImageBrowser::new(path.into()));
-
-                    Ok(ResponseData::LoadedDirectory(self.browser.as_ref().unwrap().len() as u32))
-                },
-
-                Commands::AdjustImagesettings(id, settings) => {
-                    self.browser.as_mut().unwrap().set_imagesettings(*id as usize, settings.clone());
-
-                    // Nothing to return
-                    continue;
-                },
-
-                Commands::LoadThumbnail(index) => {
-                    println!("Load thumbnail request");
-                    self.load_preview(*index)
+            // 4. Handle whichever operation woke up the thread
+            match oper.index() {
+                // An incoming job arrived
+                i if i == incoming_oper => {
+                    match oper.recv(&self.incoming_receiver) {
+                        Ok(job) => self.queue.push(RequestWithPriority::new(job)),
+                        Err(_) => break, // The incoming sender was dropped, safely exit thread
+                    }
                 }
-            };
+                // A worker is ready to receive a job
+                i if Some(i) == outgoing_oper => {
+                    // Safe to unwrap because we only registered this operation if peek().is_some()
+                    let job = self.queue.pop().unwrap();
 
-            self.response_sender.send(Response {request: msg, value: return_value}).unwrap();
+                    // Actually perform the send
+                    if oper
+                        .send(&self.outgoing_sender, job.request.clone())
+                        .is_err()
+                    {
+                        // The worker disconnected right as we tried to send!
+                        // In a robust system, we put the job back in the queue.
+                        self.queue.push(job);
+                    }
+                }
+                _ => unreachable!(),
+            }
         }
     }
 
-    pub fn run(self) {
-        thread::spawn(move || self.event_loop());
+    pub fn run(mut self, response_sender: Sender<Response>) {
+        // Start the worker threads and at only the handles to the
+        for _ in 0..10 {
+            self.worker_handles
+                .push(Worker::new(self.get_receiver(), response_sender.clone(), &self.state).run());
+        }
+
+        // Run the manager part of the model
+        thread::spawn(move || self.inner());
     }
 }

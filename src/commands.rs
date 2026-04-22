@@ -1,15 +1,26 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, atomic::AtomicBool};
 
-use slint::{Rgb8Pixel, SharedPixelBuffer};
-use crate::model::image_container::ImageSettings;
 use crate::error::ModelError;
+use crate::model::image_container::{FilterState, ImageSettings};
+use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+// Set the next id of a request as static so it can be accessed globally. The
+// counter needs to be atomic because jobs can be created on several threads.
+static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+
+fn get_id() -> usize {
+    // Dont actually know what the ordering means, but seems aight
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Clone)]
 pub struct Request {
     // Id for the job, exclusive to this job
     id: usize,
 
     // The actual command
-    pub command: Commands,
+    command: Commands,
 
     // Priority of the request
     // Not used yet, only when building the priority queue
@@ -19,24 +30,82 @@ pub struct Request {
     cancelation_token: Arc<AtomicBool>,
 }
 
+impl Request {
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn command(&self) -> Commands {
+        self.command.clone()
+    }
+
+    pub fn priority(&self) -> Priority {
+        self.priority
+    }
+
+    pub fn cancel(&mut self) {
+        self.cancelation_token.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelation_token.load(Ordering::Relaxed)
+    }
+}
+
+impl From<Commands> for Request {
+    fn from(value: Commands) -> Self {
+        value.request()
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub enum Priority {
     Low,
     Medium,
     High,
+
+    Critical,
 }
 
 impl Commands {
+    fn make(self, priority: Priority) -> Request {
+        Request {
+            id: get_id(),
+            command: self,
+            priority,
+            cancelation_token: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
     pub fn request(self) -> Request {
-        Request { id: 0, command: self, priority: Priority::Medium, cancelation_token: Arc::new(AtomicBool::new(false)) }
+        self.make(Priority::Medium)
+    }
+
+    pub fn high(self) -> Request {
+        self.make(Priority::High)
+    }
+
+    pub fn low(self) -> Request {
+        self.make(Priority::Low)
+    }
+
+    pub fn critical(self) -> Request {
+        self.make(Priority::Critical)
     }
 }
 
+#[derive(Clone)]
 pub enum Commands {
     LoadPhoto(u32),
     LoadDirectory(String),
     LoadThumbnail(u32),
 
     AdjustImagesettings(u32, ImageSettings),
+    SetNormalFilter(u32, FilterState),
+    SetSchermFilter(u32, bool),
+
+    SaveState,
+    KillThread,
 }
 
 pub struct Response {
@@ -47,9 +116,10 @@ pub struct Response {
     pub value: Result<ResponseData, ModelError>,
 }
 
+#[derive(Debug)]
 pub enum ResponseData {
     LoadedDirectory(u32),
-    LoadedPhoto(SharedPixelBuffer<Rgb8Pixel>, ImageSettings),
+    LoadedPhoto(u32, SharedPixelBuffer<Rgb8Pixel>, ImageSettings),
     SettingsForPhoto(u32, ImageSettings),
     LoadedPreview(SharedPixelBuffer<Rgb8Pixel>),
 }

@@ -1,7 +1,18 @@
-import { Slider, VerticalBox, HorizontalBox, GroupBox, LineEdit, StandardButton, ComboBox, Button, ListView, ScrollView } from "std-widgets.slint";
+import {
+    Slider,
+    VerticalBox,
+    HorizontalBox,
+    GroupBox,
+    LineEdit,
+    StandardButton,
+    ComboBox,
+    Button,
+    ListView,
+    ScrollView,
+} from "std-widgets.slint";
 
 // Define the modern color palette
-export global Theme  {
+export global Theme {
     out property <color> background: #1e1e1e;
     out property <color> sidebar: #2d2d2d;
     out property <color> text: #ffffff;
@@ -30,9 +41,14 @@ export component AppWindow inherits Window {
     callback prev_photo();
     callback settings_changed(float, float);
 
+    callback accept_photo();
+    callback reject_photo();
+    callback scherm_photo(bool);
+
     // Keyboard handler
     FocusScope {
         key-pressed(event) => {
+            // Navigation
             if (event.text == Key.RightArrow) {
                 root.next_photo();
                 return accept;
@@ -41,37 +57,57 @@ export component AppWindow inherits Window {
                 root.prev_photo();
                 return accept;
             }
+
+            // Set filters
+            if (event.text == "a" || event.text == "A") {
+                root.accept_photo();
+                return accept;
+            }
+            if (event.text == "r" || event.text == "R") {
+                root.reject_photo();
+                return accept;
+            }
+            if (event.text == "s" || event.text == "S") {
+                root.scherm_photo(true);
+                return accept;
+            }
             return reject;
         }
 
 
     // Main layout: Left Image area + Right Sidebar
     HorizontalBox {
-        padding: 0px;
-        spacing: 0px;
+            padding: 0px;
+            spacing: 0px;
 
-        VerticalBox {
+            VerticalBox {
             // --- LEFT: Main Image View Area ---
             Rectangle {
-                background: black;
-                height: 80%;
+                    background: black;
+                    height: 80%;
+
+                Rectangle {
+            width: 100%;
+            height: 20px;
+
+
+            }
                 // This is a placeholder. In a real app, you'd render the image here.
                 // We simulate brightness changes by changing the rectangle color.
                 // The `* root.brightness_val` makes it react instantly to slider changes.
                 Image {
-                    source: root.current_image;
-                    width: 100%;
-                    height: 100%;
+                        source: root.current_image;
+                        width: 100%;
+                        height: 100%;
+                    }
                 }
-            }
 
-            ScrollView {
-                height: 20%;
+                ScrollView {
+                    height: 20%;
 
-                HorizontalLayout {
-                    spacing: 4px;
-                    for image in root.filmstrip_images:
-                        Rectangle {
+                    HorizontalLayout {
+                        spacing: 4px;
+                        for image in root.filmstrip_images: Rectangle {
                             background: #444444;
                             height: 100%;
                             width: 100px;
@@ -83,74 +119,83 @@ export component AppWindow inherits Window {
                                 image-fit: contain;
                             }
                         }
+                    }
                 }
             }
-        }
 
-        // --- RIGHT: Sidebar Controls ---
+            // --- RIGHT: Sidebar Controls ---
         Rectangle {
-            width: 250px;
-            background: Theme.sidebar;
+                width: 250px;
+                background: Theme.sidebar;
 
-            VerticalBox {
-                padding: 15px;
-                alignment: start;
+                VerticalBox {
+                    padding: 15px;
+                    alignment: start;
 
-                Text {
-                    text: "Develop Settings";
-                    color: Theme.text;
-                    font-weight: 700;
-                    font-size: 16px;
-                }
+                    Text {
+                        text: "Develop Settings";
+                        color: Theme.text;
+                        font-weight: 700;
+                        font-size: 16px;
+                    }
 
                 // Spacing
-                Rectangle { height: 20px; }
+                Rectangle {
+                        height: 20px;
+                    }
 
-                GroupBox {
-                   title: "Tone";
+                    GroupBox {
+                        title: "Tone";
 
-                   VerticalBox {
-                       spacing: 10px;
-                       Text {
+                        VerticalBox {
+                            spacing: 10px;
+                            Text {
                            // Show the exact numerical value
-                           text: "Brightness: " + SlintUtils.float_to_string(root.brightness_val, 2);
-                           color: Theme.text;
-                       }
-                       Slider {
-                           value <=> root.brightness_val; // Two-way binding!
-                           minimum: 0.5;
-                           maximum: 1.5;
-                           changed(value) => {
-                                settings_changed(value, root.contrast_val);
-                           }
-                       }
+                           text: "Brightness: " + root.brightness_val;
+                                color: Theme.text;
+                            }
 
-                       Text {
-                           text: "Contrast: " + SlintUtils.float_to_string(root.contrast_val, 2);
-                           color: Theme.text;
-                       }
-                       Slider {
-                           value <=> root.contrast_val; // Two-way binding!
+                            Slider {
+                                value <=> root.brightness_val; // Two-way binding!
+                           minimum: -100;
+                                maximum: 100;
+                                changed(value) => {
+                                    settings_changed(value, root.contrast_val);
+                                }
+                            }
+
+                            Text {
+                                text: "Contrast: " + SlintUtils.float_to_string(root.contrast_val, 2);
+                                color: Theme.text;
+                            }
+
+                            Slider {
+                                value <=> root.contrast_val; // Two-way binding!
                            minimum: 0.8;
-                           maximum: 1.2;
-                       }
-                   }
-                }
+                                maximum: 1.2;
+                                changed(value) => {
+                                    settings_changed(root.brightness_val, value);
+                                }
+                            }
+                        }
+                    }
 
-                // Spacing
-                Rectangle { height: 20px; }
+                    // Spacing
+                Rectangle {
+                        height: 20px;
+                    }
 
-                // Example of a button connecting to Rust logic
+                    // Example of a button connecting to Rust logic
                 Button {
-                    text: "Export Selected";
-                    primary: true;
+                        text: "Export Selected";
+                        primary: true;
                     // Ensure the button uses our theme accent color
                     // (Slint standard widgets sometimes need manual styling overrides)
                     height: 35px;
+                    }
                 }
             }
         }
-    }
     } // Close FocusScope
 }
 
