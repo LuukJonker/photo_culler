@@ -18,6 +18,7 @@ struct MasterFileIndex {
     relative_path: String,
 }
 
+// Serialize and deser support Option<> for an optional key in the json structure
 #[derive(Deserialize, Serialize)]
 struct MasterFileTemplate {
     id_counter: usize,
@@ -36,6 +37,10 @@ impl MasterFileTemplate {
         let id = self.id_counter;
         self.id_counter += 1;
         id
+    }
+
+    fn has_collection(&self, path: &Path) -> bool {
+        self.files.contains_key(path)
     }
 
     fn add_collection(&mut self, path: &Path) -> MasterFileIndex {
@@ -76,10 +81,18 @@ fn get_or_create_collection_file(collection_folder: &Path) -> Result<PathBuf, Bo
         return Ok(share_dir);
     }
 
-    let file = File::open(master_file_path)?;
-    let mut template: MasterFileTemplate = serde_json::from_reader(file)?;
+    let file = File::open(&master_file_path)?;
+    let mut template: MasterFileTemplate = serde_json::from_reader(&file)?;
+
+    let should_update = !template.has_collection(collection_folder);
 
     share_dir.push(template.add_collection(collection_folder).relative_path);
+    
+    if should_update {
+        let file = File::create(master_file_path)?;
+        serde_json::to_writer(file, &template).unwrap();
+    }
+
     Ok(share_dir)
 }
 
