@@ -38,81 +38,81 @@ impl ViewModel {
         Ok(v)
     }
 
-    fn send_load_request(&self, offset: i32) {
-        let mut state = self.appstate.lock().unwrap();
+    fn setup_callbacks(&self) {
+        // Helper to change the selected photo
+        let sender = self.sender.clone();
+        let appstate = self.appstate.clone();
+        let weak = self.ui.as_weak();
 
-        // Update the selected photo id by adding 1
-        if let Some(selected_photo) = state.selected_photo_id {
+        let go_to_photo = move |new_photo_id: u32| {
+            let mut state = appstate.lock().unwrap();
+
             // Prevent from going out of bounds
-            if selected_photo + offset as u32 >= state.number_photos {
+            if new_photo_id >= state.number_photos {
                 return;
             }
 
             // Update state
-            state.selected_photo_id = Some(selected_photo + 1);
+            state.selected_photo_id = Some(new_photo_id);
 
             // Ignore the result for now
-            let _ = self.sender.send(Commands::LoadPhoto(selected_photo).high());
-        }
-    }
+            let _ = sender.send(Commands::LoadPhoto(new_photo_id).high());
 
-    fn setup_callbacks(&self) {
-        // Next photo callback
-        let sender = self.sender.clone();
-        let appstate = self.appstate.clone();
-
-        let weak = self.ui.as_weak();
-
-        self.ui.on_next_photo(move || {
-            let mut state = appstate.lock().unwrap();
-
-            // Update the selected photo id by adding 1
-            if let Some(selected_photo) = state.selected_photo_id {
-                let new_photo_id = selected_photo + 1;
-
-                // Prevent from going out of bounds
-                if new_photo_id >= state.number_photos {
-                    return;
+            let _ = weak.upgrade_in_event_loop(move |handle| {
+                // Immediately show the already loaded preview if available in filmstrip
+                let filmstrip = handle.get_filmstrip_images();
+                if (new_photo_id as usize) < filmstrip.row_count() {
+                    let preview = filmstrip.row_data(new_photo_id as usize).unwrap();
+                    // Only set if it's not the default (empty) image
+                    // Note: Slint images don't have an easy "is_empty" but we can check if it has a size if we really wanted to.
+                    // For now, we just set it.
+                    handle.set_current_image(preview);
                 }
 
-                // Update state
-                state.selected_photo_id = Some(new_photo_id);
+                // Update the filmstrip to show the selected photo
+                handle.set_selected_index(new_photo_id as i32);
+            });
+        };
 
-                // Ignore the result for now
-                let _ = sender.send(Commands::LoadPhoto(new_photo_id).high());
-
-                // Immediately show the already loaded preview
-                let _ = weak.upgrade_in_event_loop(move |handle| {
-                    let filmstrip = handle.get_filmstrip_images();
-                    if (new_photo_id as usize) < filmstrip.row_count() {
-                        handle
-                            .set_current_image(filmstrip.row_data(new_photo_id as usize).unwrap());
-                    }
-                });
+        // Next photo callback
+        let go_to = go_to_photo.clone();
+        let appstate = self.appstate.clone();
+        self.ui.on_next_photo(move || {
+            let selected_photo = appstate.lock().unwrap().selected_photo_id;
+            if let Some(id) = selected_photo {
+                go_to(id + 1);
             }
         });
 
         // Previous photo callback
+        let go_to = go_to_photo.clone();
+        let appstate = self.appstate.clone();
+        self.ui.on_prev_photo(move || {
+            let selected_photo = appstate.lock().unwrap().selected_photo_id;
+            if let Some(id) = selected_photo {
+                if id > 0 {
+                    go_to(id - 1);
+                }
+            }
+        });
+
+        // Select photo callback
+        let go_to = go_to_photo.clone();
+        self.ui.on_select_photo(move |index| {
+            go_to(index as u32);
+        });
+
+        // Load raw callback
         let sender = self.sender.clone();
         let appstate = self.appstate.clone();
 
-        self.ui.on_prev_photo(move || {
-            let mut state = appstate.lock().unwrap();
+        self.ui.on_load_raw(move || {
+            let state = appstate.lock().unwrap();
 
             // Update the selected photo id by adding 1
             if let Some(selected_photo) = state.selected_photo_id {
-                let new_photo_id = selected_photo - 1;
-
-                // Prevent from going out of bounds
-                if selected_photo <= 0 {
-                    return;
-                }
-
-                // Update state
-                state.selected_photo_id = Some(new_photo_id);
-
                 // Ignore the result for now
-                let _ = sender.send(Commands::LoadPhoto(new_photo_id).high());
+                let _ = sender.send(Commands::LoadRawPhoto(selected_photo).high());
             }
         });
 
@@ -123,49 +123,63 @@ impl ViewModel {
         self.ui.on_settings_changed(move |brightness, contrast| {
             let state = appstate.lock().unwrap();
 
-            let _ = sender.send(
-                Commands::AdjustImagesettings(
-                    state.selected_photo_id.unwrap(),
-                    ImageSettings {
-                        brightness,
-                        contrast,
-                    },
-                )
-                .into(),
-            );
+            if let Some(selected_photo_id) = state.selected_photo_id {
+                let _ = sender.send(
+                    Commands::AdjustImagesettings(
+                        selected_photo_id,
+                        ImageSettings {
+                            brightness,
+                            contrast,
+                        },
+                    )
+                    .into(),
+                );
+            }
         });
 
         // Set filters
         let sender = self.sender.clone();
         let appstate = self.appstate.clone();
+        let weak = self.ui.as_weak();
 
         self.ui.on_accept_photo(move || {
             let state = appstate.lock().unwrap();
-            sender
-                .send(
-                    Commands::SetNormalFilter(
-                        state.selected_photo_id.unwrap(),
-                        FilterState::Accepted,
-                    )
-                    .request(),
-                )
+            if let Some(selected_photo_id) = state.selected_photo_id {
+                weak.upgrade_in_event_loop(move |handle| {
+                    handle
+                        .get_filmstrip_statuses()
+                        .set_row_data(selected_photo_id as usize, 1)
+                })
                 .unwrap();
+
+                sender
+                    .send(
+                        Commands::SetNormalFilter(selected_photo_id, FilterState::Accepted).request(),
+                    )
+                    .unwrap();
+            }
         });
 
         let sender = self.sender.clone();
         let appstate = self.appstate.clone();
+        let weak = self.ui.as_weak();
 
         self.ui.on_reject_photo(move || {
             let state = appstate.lock().unwrap();
-            sender
-                .send(
-                    Commands::SetNormalFilter(
-                        state.selected_photo_id.unwrap(),
-                        FilterState::Rejected,
-                    )
-                    .request(),
-                )
+            if let Some(selected_photo_id) = state.selected_photo_id {
+                weak.upgrade_in_event_loop(move |handle| {
+                    handle
+                        .get_filmstrip_statuses()
+                        .set_row_data(selected_photo_id as usize, 2)
+                })
                 .unwrap();
+
+                sender
+                    .send(
+                        Commands::SetNormalFilter(selected_photo_id, FilterState::Rejected).request(),
+                    )
+                    .unwrap();
+            }
         });
 
         let sender = self.sender.clone();
@@ -173,9 +187,38 @@ impl ViewModel {
 
         self.ui.on_scherm_photo(move |flag| {
             let state = appstate.lock().unwrap();
-            sender
-                .send(Commands::SetSchermFilter(state.selected_photo_id.unwrap(), flag).request())
+            if let Some(selected_photo_id) = state.selected_photo_id {
+                sender
+                    .send(Commands::SetSchermFilter(selected_photo_id, flag).request())
+                    .unwrap();
+            }
+        });
+
+        let sender = self.sender.clone();
+        let appstate = self.appstate.clone();
+        let weak = self.ui.as_weak();
+
+        self.ui.on_clear_filter(move || {
+            let state = appstate.lock().unwrap();
+            if let Some(selected_photo_id) = state.selected_photo_id {
+                weak.upgrade_in_event_loop(move |handle| {
+                    handle
+                        .get_filmstrip_statuses()
+                        .set_row_data(selected_photo_id as usize, 0)
+                })
                 .unwrap();
+
+                sender
+                    .send(
+                        Commands::SetNormalFilter(selected_photo_id, FilterState::Unknown).request(),
+                    )
+                    .unwrap();
+            }
+        });
+
+        self.ui.on_set_view_filter(move |filter| {
+            println!("View filter changed to: {}", filter);
+            // TODO: Implement actual filtering logic in the model
         });
     }
 
