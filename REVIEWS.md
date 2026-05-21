@@ -23,3 +23,4 @@ You are a senior Rust architect reviewing the `photo-culler` project. Your goal 
 1. Run `git diff HEAD~1` to see the latest changes.
 2. Analyze the impact on existing modules (`model`, `view_model`, `commands`).
 3. Provide a summary of "Great Work," "Learning Opportunities," and "Critical Issues."
+
