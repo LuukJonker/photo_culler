@@ -2,7 +2,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, atomic::AtomicBool};
 
 use crate::error::ModelError;
-use crate::model::image_container::{FilterState, ImageSettings};
+use crate::model::image_container::{FilterSettings, FilterState, ImageSettings};
+use rsraw::ProcessedImage;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 // Set the next id of a request as static so it can be accessed globally. The
@@ -97,6 +98,7 @@ impl Commands {
 #[derive(Clone)]
 pub enum Commands {
     LoadPhoto(u32),
+    LoadRawPhoto(u32),
     LoadDirectory(String),
     LoadThumbnail(u32),
 
@@ -116,10 +118,13 @@ pub struct Response {
     pub value: Result<ResponseData, ModelError>,
 }
 
-#[derive(Debug)]
 pub enum ResponseData {
     LoadedDirectory(u32),
-    LoadedPhoto(u32, SharedPixelBuffer<Rgb8Pixel>, ImageSettings),
-    SettingsForPhoto(u32, ImageSettings),
-    LoadedPreview(SharedPixelBuffer<Rgb8Pixel>),
+    LoadedPhoto(u32, SharedPixelBuffer<Rgb8Pixel>, crate::model::image_container::ImageContainerState),
+    LoadedPreview(SharedPixelBuffer<Rgb8Pixel>, FilterSettings),
+}
+
+pub enum RenderRequest {
+    PreloadRaw(ProcessedImage<16>), // ! Might be nice to have a uid to make sure these apply to the same
+    ComputeChange(ImageSettings),
 }

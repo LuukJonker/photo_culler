@@ -2,18 +2,21 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ModelError {
-    #[error("Image not found")]
-    PhotoNotFound(#[from] std::io::Error),
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
 
-    #[error("Image file not supported or corrupted")]
-    PhotoCorrupted(#[from] image::ImageError),
+    #[error(transparent)]
+    ImageDecoding(#[from] image::ImageError),
 
     #[error("Directory was not found")]
     DirectoryNotFound,
+
+    #[error("Coudn't store state to disk")]
+    StateDiskStore,
 
     #[error("{0}")]
     WithMessage(String),
 
     #[error("Undefined error")]
-    Undefined,
+    _Undefined,
 }

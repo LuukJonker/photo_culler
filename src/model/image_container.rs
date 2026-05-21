@@ -1,38 +1,34 @@
 use std::{
-    cell::RefCell,
     error::Error,
+    fs,
     io::BufReader,
     path::{Path, PathBuf},
     sync::RwLock,
 };
 
 use crate::error::ModelError;
-use exif::{Exif, Field};
+use exif::Field;
 use image::DynamicImage;
-use rawloader::RawImage;
+use rsraw::{BIT_DEPTH_8, RawImage};
+use serde::{Deserialize, Serialize};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 mod jpgfromraw;
 
-enum ImageType {
-    Raw,
-    Compressed,
-}
-
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct ImageSettings {
     pub brightness: f32,
     pub contrast: f32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum FilterState {
     Unknown,
     Accepted,
     Rejected,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FilterSettings {
     // If the photo is accepted or rejected
     pub filter: FilterState,
@@ -48,6 +44,14 @@ impl Default for FilterSettings {
             scherm: false,
         }
     }
+}
+
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ImageContainerState {
+    pub path: PathBuf,
+    pub image_settings: ImageSettings,
+    pub filter_settings: FilterSettings,
 }
 
 pub struct ImageContainer {
@@ -86,12 +90,25 @@ fn is_raw(path: &Path) -> bool {
 
 fn load_compressed_image(path: &Path) -> Result<image::DynamicImage, ModelError> {
     if is_raw(path) {
-        let jpg_bytes = match jpgfromraw::process_file(path) {
+        let (jpg_bytes, orientation) = match jpgfromraw::process_file(path) {
             Ok(val) => val,
             Err(e) => return Err(ModelError::WithMessage(e.to_string())),
         };
 
         let img = image::load_from_memory(&jpg_bytes)?;
+
+        // Apply the orientation
+        let img = match orientation {
+            2 => img.fliph(),
+            3 => img.rotate180(),
+            4 => img.flipv(),
+            5 => img.fliph().rotate270(),
+            6 => img.rotate90(), // Camera rotated 90 degrees CW
+            7 => img.fliph().rotate90(),
+            8 => img.rotate270(), // Camera rotated 90 degrees CCW
+            _ => img,             // 1 means normal landscape
+        };
+
         return Ok(img);
     }
 
@@ -100,33 +117,74 @@ fn load_compressed_image(path: &Path) -> Result<image::DynamicImage, ModelError>
     Ok(img)
 }
 
-fn load_full_raw_image(path: &Path) -> Result<RawImage, ModelError> {
-    match rawloader::decode_file(path) {
-        Ok(val) => Ok(val),
-        Err(e) => Err(ModelError::WithMessage(e.to_string())),
+fn load_full_raw_image(path: &Path, use_half_size: bool) -> Result<RawImage, ModelError> {
+    let start_total = std::time::Instant::now();
+    let raw_bytes = fs::read(path)?;
+    println!("fs::read took {:?}", start_total.elapsed());
+
+    let start_open = std::time::Instant::now();
+    let mut raw_image = match RawImage::open(&raw_bytes) {
+        Ok(v) => v,
+        Err(e) => return Err(ModelError::WithMessage(e.to_string())),
+    };
+    println!("RawImage::open took {:?}", start_open.elapsed());
+
+    raw_image.set_half_size(use_half_size);
+
+    // Unpack it here so the error propagates to your UI gracefully
+    let start_unpack = std::time::Instant::now();
+    if let Err(e) = raw_image.unpack() {
+        return Err(ModelError::WithMessage(e.to_string()));
     }
+    println!("raw_image.unpack took {:?}", start_unpack.elapsed());
+    println!("load_full_raw_image total took {:?}", start_total.elapsed());
+
+    Ok(raw_image)
+}
+
+fn raw_image_to_slint_image(mut raw_img: RawImage) -> SharedPixelBuffer<Rgb8Pixel> {
+    let start_total = std::time::Instant::now();
+    let processed = raw_img.process::<BIT_DEPTH_8>().unwrap();
+    println!("raw_img.process took {:?}", start_total.elapsed());
+
+    let start_copy = std::time::Instant::now();
+    let mut shared_buf = SharedPixelBuffer::<Rgb8Pixel>::new(processed.width(), processed.height());
+    shared_buf
+        .make_mut_bytes()
+        .copy_from_slice(processed.iter().as_slice());
+    println!("Buffer creation & copy took {:?}", start_copy.elapsed());
+    println!(
+        "raw_image_to_slint_image total took {:?}",
+        start_total.elapsed()
+    );
+
+    shared_buf
 }
 
 fn dynamic_image_to_slint_image(dyn_img: &DynamicImage) -> SharedPixelBuffer<Rgb8Pixel> {
-    let total_start = std::time::Instant::now();
+    // If the underlying image is not rgb, but rgba (like with png), this will fail
+    // In that case we can just clone the dynamic image and build the rgb from there, doesn't really matter
+    match dyn_img.as_rgb8() {
+        Some(rgb) => {
+            let width = rgb.width();
+            let height = rgb.height();
 
-    let rgb_start = std::time::Instant::now();
-    let rgb = dyn_img.as_rgb8().unwrap();
-    let rgb_time = rgb_start.elapsed();
+            let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
+            pixel_buffer.make_mut_bytes().copy_from_slice(rgb.as_raw());
 
-    let width = rgb.width();
-    let height = rgb.height();
+            pixel_buffer
+        }
+        None => {
+            let rgb = dyn_img.to_owned().to_rgb8();
+            let width = rgb.width();
+            let height = rgb.height();
 
-    let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
-    pixel_buffer.make_mut_bytes().copy_from_slice(rgb.as_raw());
+            let mut pixel_buffer = SharedPixelBuffer::<Rgb8Pixel>::new(width, height);
+            pixel_buffer.make_mut_bytes().copy_from_slice(rgb.as_raw());
 
-    let total_time = total_start.elapsed();
-    println!(
-        "Converting to rgb8 took {:?}, total time: {:?}",
-        rgb_time, total_time
-    );
-
-    pixel_buffer
+            pixel_buffer
+        }
+    }
 }
 
 impl ImageContainer {
@@ -140,6 +198,16 @@ impl ImageContainer {
         }
     }
 
+    pub fn from_state(state: ImageContainerState) -> Self {
+        Self {
+            path: state.path,
+            settings: state.image_settings,
+            filter_state: state.filter_settings,
+            metadata: None,
+            cached_preview: RwLock::new(None),
+        }
+    }
+
     pub fn get_full_preview(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         // Check if we have a cached preview
         if let Ok(guard) = self.cached_preview.read() {
@@ -150,7 +218,7 @@ impl ImageContainer {
                 return Ok(dynamic_image_to_slint_image(&applied_image));
             }
         }
-        println!("Loading with settings: {:?}", self.settings);
+
         let image = load_compressed_image(&self.path)?;
         let applied_image = image
             .brighten(self.settings().brightness as i32)
@@ -167,6 +235,12 @@ impl ImageContainer {
         }
 
         Ok(shared_image)
+    }
+
+    pub fn get_raw_image(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
+        Ok(raw_image_to_slint_image(load_full_raw_image(
+            &self.path, false,
+        )?))
     }
 
     pub fn get_thumbnail(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
@@ -222,5 +296,14 @@ impl ImageContainer {
         }
 
         self.load_metadata().unwrap()
+    }
+
+    // Serialization and deserialization
+    pub fn get_state(&self) -> ImageContainerState {
+        ImageContainerState {
+            path: self.path.clone(),
+            image_settings: self.settings(),
+            filter_settings: self.filter(),
+        }
     }
 }

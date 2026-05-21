@@ -1,14 +1,17 @@
+pub mod disk_writer;
 pub mod image_browser;
 pub mod image_container;
+mod render_worker;
 mod worker;
 
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 use std::{cmp::Ordering, collections::BinaryHeap, thread};
 
-use crate::commands::{Priority, Request, Response};
+use crate::commands::{Commands, Priority, Request, Response};
 use crate::model::image_browser::ImageBrowser;
 use crate::model::worker::Worker;
+// use crate::model::render_worker::RenderThread;
 use crossbeam::channel::{Receiver, Select, Sender, bounded, unbounded};
 
 struct RequestWithPriority {
@@ -63,7 +66,11 @@ pub struct Model {
     outgoing_sender: Sender<Request>,
     outgoing_receiver: Receiver<Request>,
 
-    // Workers
+    // Channels for sending the job requests to the render worker
+    _render_sender: Sender<Request>,
+    _render_receiver: Receiver<Request>,
+
+    // Workers, also holds the render worker, so can be different types of workers under need
     worker_handles: Vec<JoinHandle<()>>,
 
     // Priority queue for the requests
@@ -78,12 +85,15 @@ impl Model {
         // Incoming and outgoing channels, for dev purposes
         let (incoming_sender, incoming_receiver) = unbounded::<Request>();
         let (outgoing_sender, outgoing_receiver) = bounded::<Request>(0);
+        let (_render_sender, _render_receiver) = unbounded::<Request>();
 
         Self {
             incoming_sender,
             incoming_receiver,
             outgoing_sender,
             outgoing_receiver,
+            _render_sender,
+            _render_receiver,
 
             worker_handles: Vec::new(),
             queue: BinaryHeap::new(),
@@ -100,7 +110,7 @@ impl Model {
         self.outgoing_receiver.clone()
     }
 
-    fn inner(mut self) {
+    fn inner(&mut self) {
         loop {
             // Rebuild the selector every iteration
             let mut sel = Select::new(); // Can use biased selector to make sure jobs are handed out first
@@ -131,6 +141,19 @@ impl Model {
                     // Safe to unwrap because we only registered this operation if peek().is_some()
                     let job = self.queue.pop().unwrap();
 
+                    if let Commands::KillThread = job.request.command() {
+                        // Kill this thread
+                        if job.request.priority() == Priority::Low {
+                            return;
+                        }
+
+                        for _ in 0..11 {
+                            self.queue.push(RequestWithPriority {
+                                request: Commands::KillThread.critical(),
+                                priority: Priority::Critical,
+                            });
+                        }
+                    }
                     // Actually perform the send
                     if oper
                         .send(&self.outgoing_sender, job.request.clone())
@@ -146,14 +169,20 @@ impl Model {
         }
     }
 
-    pub fn run(mut self, response_sender: Sender<Response>) {
+    pub fn run(mut self, response_sender: Sender<Response>) -> Vec<JoinHandle<()>> {
+        let mut worker_handles = Vec::new();
+
         // Start the worker threads and at only the handles to the
         for _ in 0..10 {
-            self.worker_handles
+            worker_handles
                 .push(Worker::new(self.get_receiver(), response_sender.clone(), &self.state).run());
         }
 
+        // worker_handles.push(RenderThread::new(self.render_sender.clone(), self.render_receiver.clone()).run());
+
         // Run the manager part of the model
         thread::spawn(move || self.inner());
+
+        worker_handles
     }
 }

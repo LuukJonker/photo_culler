@@ -1,9 +1,13 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::error::Error;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::FileExt;
 use std::path::Path;
 
+use crate::error::ModelError;
+
+const HEADER_LENGTH: usize = 34;
 
 /// An embedded JPEG in a RAW file.
 #[derive(Default, Eq, PartialEq)]
@@ -14,37 +18,48 @@ struct EmbeddedJpegInfo {
 }
 
 fn find_largest_embedded_jpeg_impl<B: ByteOrder>(
-    raw_buf: &[u8]
+    file: &mut File,
 ) -> Result<EmbeddedJpegInfo, Box<dyn Error>> {
     const IFD_ENTRY_SIZE: usize = 12;
     const JPEG_TAG: u16 = 0x201;
     const JPEG_LENGTH_TAG: u16 = 0x202;
     const ORIENTATION_TAG: u16 = 0x112;
 
-    let mut next_ifd_offset = B::read_u32(&raw_buf[4..8]).try_into()?;
+    // Read in the offset from the file. We need to skip 4 bytes, but did that
+    // in the caller of this function.
+    let mut offset_buf = [0; 4];
+    file.read_exact(&mut offset_buf)?;
+
+    // Decode from the buffer
+    let mut next_ifd_offset = B::read_u32(&offset_buf).try_into()?;
     let mut largest_jpeg = EmbeddedJpegInfo::default();
 
+    // Allocate the entries buf here and resize in loop to only request new memory if the buf needs to be larger
+
     while next_ifd_offset != 0 {
-        // ensure!(next_ifd_offset + 2 <= raw_buf.len(), "Invalid IFD offset");
+        // Get the number of entries from the
+        let mut num_entries_buf = [0; 2];
+        file.seek(SeekFrom::Start(next_ifd_offset))?;
+        if file.read_exact(&mut num_entries_buf).is_err() {
+            // We break if the file ended and we can't read no more
+            break;
+        }
 
-        let cursor = &raw_buf[next_ifd_offset..];
-        let num_entries = B::read_u16(&cursor[..2]).into();
-        let entries_cursor = &cursor[2..];
+        // Decode the number of entries
+        let num_entries = B::read_u16(&num_entries_buf).into();
 
+        // Calculate the length in bytes
         let entries_len = num_entries * IFD_ENTRY_SIZE;
-        // ensure!(
-        //     entries_cursor.len() >= entries_len,
-        //     "Invalid number of IFD entries"
-        // );
+
+        // Need 6 extra bytes to include the size of the next ifd offset. Also
+        let mut entries_buf = vec![0; entries_len + 6];
+        file.read_exact(&mut entries_buf)?;
 
         let mut cur_offset = None;
         let mut cur_length = None;
         let mut cur_orientation = None;
 
-        for entry in entries_cursor
-            .chunks_exact(IFD_ENTRY_SIZE)
-            .take(num_entries)
-        {
+        for entry in entries_buf.chunks_exact(IFD_ENTRY_SIZE).take(num_entries) {
             let tag = B::read_u16(&entry[..2]);
 
             match tag {
@@ -65,12 +80,14 @@ fn find_largest_embedded_jpeg_impl<B: ByteOrder>(
             }
         }
 
-        let next_ifd_offset_offset = 2 + entries_len;
-        // ensure!(
-        //     cursor.len() >= next_ifd_offset_offset + 4,
-        //     "Invalid next IFD offset"
-        // );
-        next_ifd_offset = B::read_u32(&cursor[next_ifd_offset_offset..][..4]).try_into()?;
+        next_ifd_offset = B::read_u32(&entries_buf[2 + entries_len..][..4]).try_into()?;
+    }
+
+    // Check if there was actually a jpeg found, otherwise return error
+    if largest_jpeg == EmbeddedJpegInfo::default() {
+        return Err(Box::new(ModelError::WithMessage(
+            "Couldn't find jpeg in raw image".into(),
+        )));
     }
 
     Ok(largest_jpeg)
@@ -85,31 +102,18 @@ fn find_largest_embedded_jpeg_impl<B: ByteOrder>(
 ///
 /// - kamadak-exif: Reads into a big `Vec<u8>`, which is huge for our big RAW.
 /// - quickexif: Cannot iterate over IFDs.
-fn find_largest_embedded_jpeg(raw_buf: &[u8]) -> Result<EmbeddedJpegInfo, Box<dyn Error>> {
+fn find_largest_embedded_jpeg(file: &mut File) -> Result<EmbeddedJpegInfo, Box<dyn Error>> {
     const TIFF_MAGIC_LE: &[u8] = b"II*\0";
 
-    // ensure!(raw_buf.len() >= 8, "Not enough data for TIFF header");
-
-    let is_le = &raw_buf[0..4] == TIFF_MAGIC_LE;
-    // ensure!(
-    //     is_le || &raw_buf[0..4] == TIFF_MAGIC_BE,
-    //     "Not a valid TIFF file"
-    // );
+    let mut magic_buf: [u8; 4] = [0; 4];
+    file.read_exact(&mut magic_buf)?;
+    let is_le = magic_buf == TIFF_MAGIC_LE;
 
     let largest_jpeg = if is_le {
-        find_largest_embedded_jpeg_impl::<LittleEndian>(raw_buf)?
+        find_largest_embedded_jpeg_impl::<LittleEndian>(file)?
     } else {
-        find_largest_embedded_jpeg_impl::<BigEndian>(raw_buf)?
+        find_largest_embedded_jpeg_impl::<BigEndian>(file)?
     };
-
-    // ensure!(
-    //     largest_jpeg != EmbeddedJpegInfo::default(),
-    //     "No JPEG data found"
-    // );
-    // ensure!(
-    //     largest_jpeg.offset + largest_jpeg.length <= raw_buf.len(),
-    //     "JPEG data exceeds file size"
-    // );
 
     Ok(largest_jpeg)
 }
@@ -117,7 +121,7 @@ fn find_largest_embedded_jpeg(raw_buf: &[u8]) -> Result<EmbeddedJpegInfo, Box<dy
 /// The embedded JPEG comes with no EXIF data. While most of it is outside of the scope of this
 /// application, it's pretty vexing to have the wrong orientation, so copy that over.
 #[rustfmt::skip]
-const fn get_header_bytes(orientation: u16) -> [u8; 34] {
+const fn get_header_bytes(orientation: u16) -> [u8; HEADER_LENGTH] {
     let orientation_bytes = orientation.to_le_bytes();
     [
         0xff, 0xd8, // SOI
@@ -136,25 +140,34 @@ const fn get_header_bytes(orientation: u16) -> [u8; 34] {
 }
 
 /// Extract the JPEG bytes from the memory-mapped RAW buffer.
-fn extract_jpeg(
-    raw_buf: &[u8],
-    jpeg: &EmbeddedJpegInfo,
-) -> Vec<u8> {
-    // Look later if actually fast
-    let mut hdr_bytes = get_header_bytes(jpeg.orientation.unwrap_or(1)).to_vec();
-    hdr_bytes.extend(raw_buf[jpeg.offset..jpeg.offset + jpeg.length].to_vec());
-    raw_buf[jpeg.offset..jpeg.offset + jpeg.length].to_vec()
-}
+fn extract_jpeg(file: &mut File, jpeg: &EmbeddedJpegInfo) -> Result<Vec<u8>, Box<dyn Error>> {
+    let total_size = HEADER_LENGTH + jpeg.length - 2;
 
+    // Initialize the vector with zeros so `len` == `capacity`
+    let mut buf = vec![0u8; total_size];
+
+    // 1. Write the header to the beginning of the slice
+    let header = get_header_bytes(jpeg.orientation.unwrap_or(1));
+    buf[..HEADER_LENGTH].copy_from_slice(&header);
+
+    // 2. Seek to the start of the payload
+    file.seek(SeekFrom::Start(jpeg.offset as u64 + 2))?;
+
+    // 3. Read the file into the remainder of the buffer
+    // Now that `buf.len()` is the total size, this slice actually represents
+    // the remaining megabytes of memory.
+    file.read_exact(&mut buf[HEADER_LENGTH..])?;
+
+    Ok(buf)
+}
 /// Process a single RAW file to extract the embedded JPEG, and then write the extracted JPEG to
 /// the output directory.
-pub fn process_file(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn process_file(path: &Path) -> Result<(Vec<u8>, u16), Box<dyn Error>> {
     let mut in_file = File::open(path)?;
-    let mut raw_buf = Vec::new();
-    in_file.read_to_end(&mut raw_buf)?;
 
-    let jpeg_info = find_largest_embedded_jpeg(&raw_buf)?;
-    let jpeg_buf = extract_jpeg(&raw_buf, &jpeg_info);
+    let jpeg_info = find_largest_embedded_jpeg(&mut in_file)?;
 
-    Ok(jpeg_buf)
+    let jpg = extract_jpeg(&mut in_file, &jpeg_info)?;
+
+    Ok((jpg, jpeg_info.orientation.unwrap_or(1)))
 }

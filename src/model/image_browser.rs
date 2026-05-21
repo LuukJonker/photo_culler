@@ -1,6 +1,7 @@
 use crate::error::ModelError;
-use crate::model::image_container::{ImageContainer, ImageSettings};
-use slint::{Rgb8Pixel, SharedPixelBuffer};
+use crate::model::disk_writer::{read_contents, write_contents};
+use crate::model::image_container::{ImageContainer, ImageContainerState, ImageSettings};
+use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -28,8 +29,21 @@ fn get_all_files(folder_path: &Path) -> Result<Vec<ImageContainer>, ModelError> 
         .collect())
 }
 
+#[derive(Serialize, Deserialize)]
+struct CollectionTemplate {
+    view_state: (),
+    images_states: Vec<ImageContainerState>,
+}
+
 impl ImageBrowser {
     pub fn new(folder_path: PathBuf) -> Result<Self, ModelError> {
+        if let Ok(temp) = read_contents::<CollectionTemplate>(&folder_path) {
+            return Ok(Self {
+                images: temp.images_states.iter().map(|state| ImageContainer::from_state(state.clone())).collect(),
+                root_folder: folder_path,
+            })
+        }
+
         let entries = get_all_files(&folder_path)?;
 
         Ok(Self {
@@ -48,5 +62,21 @@ impl ImageBrowser {
 
     pub fn mut_at_index(&mut self, index: usize) -> &mut ImageContainer {
         &mut self.images[index]
+    }
+
+    pub fn save_to_disk(&self) -> Result<(), ModelError> {
+        let mut images_states = Vec::with_capacity(self.len());
+        for image in &self.images {
+            images_states.push(image.get_state())
+        }
+
+        let template = CollectionTemplate {
+            view_state: (),
+            images_states,
+        };
+
+        write_contents(&self.root_folder, template).unwrap();
+
+        Ok(())
     }
 }

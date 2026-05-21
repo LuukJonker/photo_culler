@@ -35,32 +35,36 @@ impl Worker {
     }
 
     fn load_photo(&self, index: u32) -> Result<ResponseData, ModelError> {
-        let total_start = std::time::Instant::now();
         let browser_lock = self.browser.read().unwrap();
         let browser = browser_lock.as_ref().unwrap();
 
         let container = browser.at_index(index as usize);
-        let settings = container.settings();
-        let image_start = std::time::Instant::now();
         let image = container.get_full_preview()?;
-        let image_time = image_start.elapsed();
+        
+        Ok(ResponseData::LoadedPhoto(index, image, container.get_state()))
+    }
 
-        let total_time = total_start.elapsed();
-        println!(
-            "Loading image took {:?}, total time: {:?}",
-            image_time, total_time
-        );
+    fn load_raw_photo(&self, index: u32) -> Result<ResponseData, ModelError> {
+        // Get the browser
+        let browser_lock = self.browser.read().unwrap();
+        let browser = browser_lock.as_ref().unwrap();
 
-        Ok(ResponseData::LoadedPhoto(index, image, settings))
+        // Get a container
+        let container = browser.at_index(index as usize);
+        let image = container.get_full_preview()?;
+
+        Ok(ResponseData::LoadedPhoto(index, image, container.get_state()))
     }
 
     fn load_preview(&self, index: u32) -> Result<ResponseData, ModelError> {
         let browser_lock = self.browser.read().unwrap();
         let browser = browser_lock.as_ref().ok_or(ModelError::DirectoryNotFound)?;
 
-        let image = browser.at_index(index as usize).get_thumbnail()?;
+        let container = browser.at_index(index as usize);
+        let image = container.get_thumbnail()?;
+        let filter = container.filter();
 
-        Ok(ResponseData::LoadedPreview(image))
+        Ok(ResponseData::LoadedPreview(image, filter))
     }
 
     fn load_directory(&mut self, path: String) -> Result<ResponseData, ModelError> {
@@ -88,12 +92,12 @@ impl Worker {
     ) -> ResponseAction<Result<ResponseData, ModelError>> {
         match cmd {
             Commands::LoadPhoto(index) => ResponseAction::Respond(self.load_photo(index)),
+            Commands::LoadRawPhoto(index) => ResponseAction::Respond(self.load_raw_photo(index)),
             Commands::LoadThumbnail(index) => ResponseAction::Respond(self.load_preview(index)),
 
             Commands::LoadDirectory(path) => ResponseAction::Respond(self.load_directory(path)),
 
             Commands::AdjustImagesettings(id, settings) => {
-                println!("New settings: {:?}", settings);
                 self.browser
                     .write()
                     .unwrap()
@@ -101,7 +105,6 @@ impl Worker {
                     .unwrap()
                     .mut_at_index(id as usize)
                     .set_settings(settings);
-
 
                 // Nothing to return
                 // None
@@ -132,12 +135,19 @@ impl Worker {
             }
 
             Commands::SaveState => {
-                // Exit to close the thread, could later add a specific command
-                // to exit more controlled.
-                return ResponseAction::Exit;
+                let browser = self.browser.read().unwrap();
+                browser.as_ref().unwrap().save_to_disk();
+
+                // Do nothing after saving state, previously exited here, but didn't seem like a
+                // good plan.
+                return ResponseAction::Nothing;
             }
 
-            Commands::KillThread => ResponseAction::Exit,
+            Commands::KillThread => {
+                // Exit to close the thread, could later add a specific command
+                // to exit more controlled.
+                ResponseAction::Exit
+            }
         }
     }
 

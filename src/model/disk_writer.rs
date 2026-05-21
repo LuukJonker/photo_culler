@@ -1,4 +1,4 @@
-use crate::{constants::APP_NAME, error::ModelError};
+use crate::{constants::{APP_AUTHOR, APP_NAME}, error::ModelError};
 use appdirs::user_data_dir;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -39,13 +39,10 @@ impl MasterFileTemplate {
         id
     }
 
-    fn has_collection(&self, path: &Path) -> bool {
-        self.files.contains_key(path)
-    }
-
-    fn add_collection(&mut self, path: &Path) -> MasterFileIndex {
+    /// The bool in the tuple returns if the collection was already present
+    fn get_or_add_collection(&mut self, path: &Path) -> (MasterFileIndex, bool) {
         match self.files.get(path) {
-            Some(val) => return val.clone(),
+            Some(val) => return (val.clone(), true),
             None => {
                 let id = self._get_id();
                 let index = MasterFileIndex {
@@ -53,17 +50,27 @@ impl MasterFileTemplate {
                     relative_path: format!("collection_{}.json", id),
                 };
                 self.files.insert(path.to_path_buf(), index.clone());
-                return index;
+                return (index, false);
             }
         }
     }
+}
+
+fn write_json_atomic<T>(path: &Path, template: &T)
+where
+    T: Serialize,
+{
+    let tmp_path = path.with_added_extension(".tmp");
+    let tmp_file = File::create(&tmp_path).unwrap();
+    serde_json::to_writer(tmp_file, template).unwrap();
+    fs::rename(tmp_path, path).unwrap();
 }
 
 /// Will get or create the file where the collection state lives
 ///
 /// Returns the path to the json file
 fn get_or_create_collection_file(collection_folder: &Path) -> Result<PathBuf, Box<dyn Error>> {
-    let mut share_dir = user_data_dir(Some(APP_NAME), None, false)
+    let mut share_dir = user_data_dir(Some(APP_NAME), Some(APP_AUTHOR), false)
         .map_err(|_e| ModelError::WithMessage("No user data dir in os".into()))?;
     // Try to create the dir if it doesn't exist already
     fs::create_dir_all(&share_dir)?;
@@ -71,54 +78,46 @@ fn get_or_create_collection_file(collection_folder: &Path) -> Result<PathBuf, Bo
     let mut master_file_path = share_dir.clone();
     master_file_path.push("master_file.json");
 
-    if !fs::exists(&master_file_path)? {
-        let file = File::create(&master_file_path)?;
+    if !master_file_path.exists() {
         let mut template = MasterFileTemplate::new();
-        let index = template.add_collection(collection_folder);
-        serde_json::to_writer(file, &template)?;
+        let (index, _) = template.get_or_add_collection(collection_folder);
+        write_json_atomic(&master_file_path, &template);
 
         share_dir.push(index.relative_path);
         return Ok(share_dir);
     }
 
     let file = File::open(&master_file_path)?;
-    let mut template: MasterFileTemplate = serde_json::from_reader(&file)?;
+    let mut template: MasterFileTemplate = serde_json::from_reader(file)?;
 
-    let should_update = !template.has_collection(collection_folder);
+    let (index, contained) = template.get_or_add_collection(collection_folder);
+    share_dir.push(index.relative_path);
 
-    share_dir.push(template.add_collection(collection_folder).relative_path);
-    
-    if should_update {
-        let file = File::create(master_file_path)?;
-        serde_json::to_writer(file, &template).unwrap();
+    if !contained {
+        write_json_atomic(&master_file_path, &template);
     }
 
     Ok(share_dir)
 }
 
-impl StateWriter {
-    pub fn new(root_folder: &Path) -> Result<Self, Box<dyn Error>> {
-        Ok(Self {
-            state_file_path: get_or_create_collection_file(root_folder)?,
-        })
-    }
+pub fn write_contents<T>(root_folder: &Path, contents: T) -> Result<(), Box<dyn Error>>
+where
+    T: Serialize,
+{
+    let file_path = get_or_create_collection_file(root_folder)?;
+    let file = File::create(file_path)?;
 
-    pub fn write<T>(&self, contents: T) -> Result<(), Box<dyn Error>>
-    where
-        T: Serialize,
-    {
-        let file = File::create(&self.state_file_path)?;
+    serde_json::to_writer(file, &contents)?;
 
-        serde_json::to_writer(file, &contents)?;
-
-        Ok(())
-    }
-
-    pub fn read_contents<T>(&self) -> Result<T, Box<dyn Error>>
-    where
-        T: DeserializeOwned,
-    {
-        let file = File::open(&self.state_file_path)?;
-        Ok(serde_json::from_reader::<File, T>(file)?)
-    }
+    Ok(())
 }
+
+pub fn read_contents<T>(root_folder: &Path) -> Result<T, Box<dyn Error>>
+where
+    T: DeserializeOwned,
+{
+    let file_path = get_or_create_collection_file(root_folder)?;
+    let file = File::open(file_path)?;
+    Ok(serde_json::from_reader::<File, T>(file)?)
+}
+

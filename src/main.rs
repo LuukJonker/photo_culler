@@ -2,13 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod constants;
 mod error;
 mod model;
 mod response_listener;
 mod view_model;
 
 use crossbeam::channel::unbounded;
-use std::{env::args, error::Error};
+use std::{env::args, error::Error, thread};
 
 use crate::{
     commands::{Commands, Response},
@@ -31,12 +32,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         vm.get_appstate(),
     );
 
-    model
-        .get_sender()
-        .send(Commands::LoadDirectory(args().nth(1).unwrap().into()).request())?;
+    model.get_sender().send(
+        Commands::LoadDirectory(
+            args()
+                .nth(1)
+                .ok_or_else(|| "No directory specified".to_string())?
+                .into(),
+        )
+        .request(),
+    )?;
 
     // Start the threads
-    model.run(response_sender);
+    let worker_handles = model.run(response_sender);
     listener.start();
 
     // Blocks the main thread, call it last
@@ -47,7 +54,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     vm.send_model_save();
 
     // Block until the model is done
-    // model.block_for_workers();
+    // for handle in worker_handles {
+    //     handle.join().unwrap();
+    // }
+    //
+    // For now just a simple timer
+    thread::sleep_ms(2000);
 
     Ok(())
 }
