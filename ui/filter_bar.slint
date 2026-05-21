@@ -1,0 +1,190 @@
+import { Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+component FilterButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked;
+
+    height: 30px;
+    background: active ? Theme.accent : #333;
+    border-radius: 15px;
+    
+    HorizontalLayout {
+        padding-left: 15px;
+        padding-right: 15px;
+        Text {
+            text: root.text;
+            color: white;
+            font-weight: active ? 700 : 400;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <color> icon-color;
+    in property <bool> active;
+    callback clicked;
+
+    height: 32px;
+    width: 32px;
+    border-radius: 16px;
+    background: active ? icon-color.with-alpha(0.3) : touch.pressed ? #444 : touch.has-hover ? #333 : transparent;
+    border-width: 1px;
+    border-color: active ? icon-color : #444;
+
+    Text {
+        text: root.text;
+        color: active ? white : root.icon-color;
+        font-size: 18px;
+        font-weight: 900;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+export component FilterBar inherits Rectangle {
+    in property <int> active-view-filter: 0; // 0: All, 1: Accepted, 2: Rejected
+    in property <int> selected-photo-status: 0; // 0: Unknown, 1: Accepted, 2: Rejected
+    in property <bool> is-scherm: false;
+    in property <int> view-mode: 0; // 0: Single, 1: Grid
+    in property <string> photo-filename: "";
+    
+    callback set-view-filter(int);
+    callback accept();
+    callback reject();
+    callback clear();
+    callback toggle-scherm();
+
+    height: 50px;
+    background: Theme.sidebar;
+    border-width: 1px;
+    border-color: #333;
+
+    HorizontalLayout {
+        padding-left: 20px;
+        padding-right: 20px;
+        spacing: 20px;
+        
+        // --- View Filtering (Left) ---
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            
+            VerticalLayout {
+                alignment: center;
+                Text { 
+                    text: "VIEW:"; 
+                    color: Theme.text-dim; 
+                    font-size: 11px; 
+                    font-weight: 800;
+                }
+            }
+            
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    spacing: 8px;
+                    FilterButton { 
+                        text: "ALL"; 
+                        active: root.active-view-filter == 0; 
+                        clicked => { root.set-view-filter(0); }
+                    }
+                    FilterButton { 
+                        text: "ACCEPTED"; 
+                        active: root.active-view-filter == 1; 
+                        clicked => { root.set-view-filter(1); }
+                    }
+                    FilterButton { 
+                        text: "REJECTED"; 
+                        active: root.active-view-filter == 2; 
+                        clicked => { root.set-view-filter(2); }
+                    }
+                    
+                    Rectangle { width: 10px; } // Spacer
+                    
+                    FilterButton { 
+                        text: "SCHERM"; 
+                        active: root.is-scherm; 
+                        clicked => { root.toggle-scherm(); }
+                    }
+                }
+            }
+        }
+
+        // --- Filename (Center) ---
+        if (root.photo-filename != "") : VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: center;
+                Text {
+                    text: "📷";
+                    color: Theme.accent;
+                    font-size: 14px;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.photo-filename;
+                    color: Theme.text;
+                    font-size: 14px;
+                    font-weight: 700;
+                    letter-spacing: 0.5px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // --- Current Photo Actions (Right) ---
+        if (root.view-mode == 0) : HorizontalLayout {
+            spacing: 12px;
+            alignment: end;
+            
+            VerticalLayout {
+                alignment: center;
+                Text { 
+                    text: "SET STATUS:"; 
+                    color: Theme.text-dim; 
+                    font-size: 11px; 
+                    font-weight: 800;
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    spacing: 12px;
+                    ActionButton { 
+                        text: "✓"; 
+                        icon-color: Theme.success; 
+                        active: root.selected-photo-status == 1;
+                        clicked => { root.accept(); }
+                    }
+                    ActionButton { 
+                        text: "✕"; 
+                        icon-color: Theme.danger; 
+                        active: root.selected-photo-status == 2;
+                        clicked => { root.reject(); }
+                    }
+                    ActionButton { 
+                        text: "↺"; 
+                        icon-color: Theme.text-dim; 
+                        active: root.selected-photo-status == 0;
+                        clicked => { root.clear(); }
+                    }
+                }
+            }
+        }
+    }
+}

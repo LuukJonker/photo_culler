@@ -1,0 +1,133 @@
+import { Button, Slider, GroupBox } from "std-widgets.slint";
+import { Theme, KeyboardHint } from "theme.slint";
+
+export component Sidebar inherits Rectangle {
+    in property <int> selected-index;
+    in property <int> photo-count;
+    in property <int> view-mode; // 0: Single, 1: Grid
+    in-out property <float> brightness-val;
+    in-out property <float> contrast-val;
+    
+    callback settings-changed(float, float);
+    callback load-raw();
+    callback toggle-view-mode();
+
+    width: 280px;
+    background: Theme.sidebar;
+    border-width: 1px;
+    border-color: #333;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 20px;
+        alignment: start;
+
+        VerticalLayout {
+            spacing: 8px;
+            HorizontalLayout {
+                Text {
+                    text: "PHOTO CULLER";
+                    color: Theme.accent;
+                    font-weight: 900;
+                    font-size: 20px;
+                    letter-spacing: 1px;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Button {
+                    text: root.view-mode == 0 ? "Grid" : "Single";
+                    clicked => { root.toggle-view-mode(); }
+                    height: 24px;
+                }
+            }
+            Text {
+                text: (root.photo-count > 0 ? root.selected-index + 1 : 0) + " / " + root.photo-count;
+                color: Theme.text-dim;
+                font-size: 14px;
+            }
+        }
+
+        Rectangle { height: 1px; background: #333; }
+
+        if (root.view-mode == 0) : GroupBox {
+            title: "DEVELOP";
+            VerticalLayout {
+                spacing: 15px;
+                
+                VerticalLayout {
+                    spacing: 4px;
+                    HorizontalLayout {
+                        Text { text: "Brightness"; color: Theme.text; }
+                        Text { 
+                            text: Math.round(root.brightness-val) + ""; 
+                            color: Theme.accent; 
+                            horizontal-alignment: right;
+                        }
+                    }
+                    Slider {
+                        value <=> root.brightness-val;
+                        minimum: -100;
+                        maximum: 100;
+                        changed(value) => {
+                            root.settings-changed(value, root.contrast-val);
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: 4px;
+                    HorizontalLayout {
+                        Text { text: "Contrast"; color: Theme.text; }
+                        Text { 
+                            text: root.contrast-val; 
+                            color: Theme.accent;
+                            horizontal-alignment: right;
+                        }
+                    }
+                    Slider {
+                        value <=> root.contrast_val;
+                        minimum: 0.5;
+                        maximum: 1.5;
+                        changed(value) => {
+                            root.settings-changed(root.brightness_val, value);
+                        }
+                    }
+                }
+                
+                Button {
+                    text: "Full RAW Resolution";
+                    clicked => { root.load-raw(); }
+                }
+            }
+        }
+
+        if (root.view-mode == 1) : GroupBox {
+            title: "GRID INFO";
+            VerticalLayout {
+                spacing: 10px;
+                Text { text: "Total Photos: " + root.photo-count; color: Theme.text; }
+                Text { text: "Viewing all thumbnails"; color: Theme.text-dim; font-size: 12px; }
+            }
+        }
+
+        GroupBox {
+            title: "SHORTCUTS";
+            VerticalLayout {
+                spacing: 8px;
+                KeyboardHint { key: "V"; label: "Toggle View Mode"; }
+                KeyboardHint { key: "←/→"; label: "Navigate"; }
+                KeyboardHint { key: "A"; label: "Accept Photo"; }
+                KeyboardHint { key: "R"; label: "Reject Photo"; }
+                KeyboardHint { key: "S"; label: "Toggle 'Scherm'"; }
+                KeyboardHint { key: "Q"; label: "Load RAW"; }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; } // Spacer
+
+        Button {
+            text: "EXPORT SELECTION";
+            primary: true;
+            height: 45px;
+        }
+    }
+}
