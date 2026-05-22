@@ -8,7 +8,7 @@ product-name = "Photo Culler"
 identifier = "com.photo-culler.app"
 authors = ["Luuk"]
 description = "A photo culling application"
-icons = ["assets/icon.svg"]
+icons = ["assets/icon.png"]
 
 
 [dependencies]
