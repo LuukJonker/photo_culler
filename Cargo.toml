@@ -8,9 +8,6 @@ product-name = "Photo Culler"
 identifier = "com.photo-culler.app"
 authors = ["Luuk"]
 description = "A photo culling application"
-binaries = [
-    { path = "photo_culler", main = true }
-]
 
 [dependencies]
 appdirs = "0.2.0"

@@ -45,8 +45,11 @@ jobs:
       - name: Install cargo-packager
         run: cargo install cargo-packager --locked
 
-      - name: Build and Package
-        run: cargo packager --release
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: cargo packager --release --no-build
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
