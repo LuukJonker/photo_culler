@@ -4,11 +4,29 @@ version = "0.1.0"
 edition = "2024"
 
 [package.metadata.packager]
-product-name = "Photo Culler"
-identifier = "com.photo-culler.app"
+product-name = "Green Room"
+identifier = "com.greenroom.app"
 authors = ["Luuk"]
-description = "A photo culling application"
-icons = ["assets/icon.png"]
+description = "High-performance, GPU-accelerated RAW photo culling and editing."
+# homepage = "https://github.com/LuukJonker/green_room"
+
+# Universal Asset Paths
+icons = [
+    "assets/icon.icns", 
+    "assets/icon.ico", 
+    "assets/icon.png"
+]
+
+# Targeted Installers
+# formats = ["app", "dmg", "nsis", "deb"]
+
+# macOS Specific: Tells the OS it is a photography management app
+# [package.metadata.packager.macos]
+# category = "public.app-category.photography"
+
+# Windows Specific: Configuration for the NSIS installer wizard
+# [package.metadata.packager.nsis]
+# install-mode = "perUser" # Allows installation without requiring Windows Admin elevation
 
 
 [dependencies]
