@@ -1,0 +1,17 @@
+# Maintainer: Luuk
+pkgname=green-room
+pkgver=0.1.0
+pkgrel=1
+epoch=
+pkgdesc="High-performance, GPU-accelerated RAW photo culling and editing."
+arch=('x86_64')
+depends=()
+provides=()
+conflicts=()
+replaces=()
+options=(!lto)
+source=("photo_culler_0.1.0_x86_64.tar.gz")
+sha512sums=("3f5c17a1317efb3a87f263cc00e09bd830bfb8b24ecea6956af2814098b2596c012ab4fb5693060d661dfb38690b83f566c77ed052ed16f999327a5ca39a44bf")
+package() {
+	cp -r "${srcdir}"/* "${pkgdir}"/
+}
