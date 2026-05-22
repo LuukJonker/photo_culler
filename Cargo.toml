@@ -6,8 +6,10 @@ edition = "2024"
 [package.metadata.packager]
 product-name = "Photo Culler"
 identifier = "com.photo-culler.app"
-authors = ["Luuk Jonker"]
+authors = ["Luuk"]
 description = "A photo culling application"
+icons = ["assets/icon.svg"]
+
 
 [dependencies]
 appdirs = "0.2.0"
