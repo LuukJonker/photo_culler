@@ -3,6 +3,15 @@ name = "photo_culler"
 version = "0.1.0"
 edition = "2024"
 
+[package.metadata.packager]
+product-name = "Photo Culler"
+identifier = "com.photo-culler.app"
+authors = ["Luuk"]
+description = "A photo culling application"
+binaries = [
+    { path = "photo_culler", main = true }
+]
+
 [dependencies]
 appdirs = "0.2.0"
 byteorder = "1.5.0"

@@ -1,0 +1,77 @@
+import { Button, LineEdit, GroupBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export component ExportPopup inherits Rectangle {
+    callback close();
+    callback export(string);
+    
+    in-out property <string> output-directory: "";
+
+    background: #000000aa; // Semi-transparent overlay
+    
+    TouchArea {
+        clicked => { root.close(); }
+    }
+
+    Rectangle {
+        width: 500px;
+        height: 300px;
+        background: Theme.sidebar;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: #444;
+        
+        // Prevent clicks inside from closing the popup
+        TouchArea {}
+
+        VerticalLayout {
+            padding: 30px;
+            spacing: 20px;
+            alignment: center;
+
+            Text {
+                text: "EXPORT SETTINGS";
+                color: Theme.accent;
+                font-size: 20px;
+                font-weight: 800;
+                horizontal-alignment: center;
+            }
+
+            GroupBox {
+                title: "Output Configuration";
+                VerticalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: "Output Directory:";
+                        color: Theme.text;
+                    }
+                    LineEdit {
+                        text <=> root.output-directory;
+                        placeholder-text: "Path to export directory...";
+                    }
+                }
+            }
+
+            Rectangle { vertical-stretch: 1; }
+
+            HorizontalLayout {
+                spacing: 20px;
+                alignment: center;
+                
+                Button {
+                    text: "Cancel";
+                    clicked => { root.close(); }
+                    width: 100px;
+                }
+                
+                Button {
+                    text: "Export";
+                    primary: true;
+                    enabled: root.output-directory != "";
+                    clicked => { root.export(root.output-directory); }
+                    width: 150px;
+                }
+            }
+        }
+    }
+}

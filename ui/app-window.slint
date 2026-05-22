@@ -3,6 +3,7 @@ import { Sidebar } from "sidebar.slint";
 import { Filmstrip } from "filmstrip.slint";
 import { FilterBar } from "filter_bar.slint";
 import { GridView } from "grid_view.slint";
+import { ExportPopup } from "export_popup.slint";
 
 export { Theme }
 
@@ -22,6 +23,9 @@ export component AppWindow inherits Window {
     in-out property <bool> is_scherm: false;
     in property <int> photo_count: 0;
     in property <string> selected_photo_filename: "";
+    
+    in-out property <bool> show_export_popup: false;
+    in-out property <string> export_output_directory: "";
 
     in property <image> current_image;
     in property <[image]> filmstrip_images;
@@ -39,6 +43,7 @@ export component AppWindow inherits Window {
     callback clear_filter();
     callback scherm_photo(bool);
     callback set_view_filter(int);
+    callback start_export(string);
 
     // Navigation and Scrolling logic
     function navigate_right() {
@@ -161,6 +166,7 @@ export component AppWindow inherits Window {
             Sidebar {
                 view-mode: root.view_mode;
                 toggle-view-mode => { root.view_mode = root.view_mode == 0 ? 1 : 0; }
+                export-clicked => { root.show_export_popup = true; }
                 selected-index: root.selected_index;
                 photo-count: root.photo_count;
                 brightness-val <=> root.brightness_val;
@@ -171,6 +177,15 @@ export component AppWindow inherits Window {
                 load-raw => {
                     root.load_raw();
                 }
+            }
+        }
+
+        if (root.show_export_popup) : ExportPopup {
+            output-directory <=> root.export_output_directory;
+            close => { root.show_export_popup = false; }
+            export(dir) => {
+                root.show_export_popup = false;
+                root.start_export(dir);
             }
         }
     }

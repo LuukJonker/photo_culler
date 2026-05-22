@@ -220,6 +220,11 @@ impl ViewModel {
             println!("View filter changed to: {}", filter);
             // TODO: Implement actual filtering logic in the model
         });
+
+        self.ui.on_start_export(move |dir| {
+            println!("Exporting to: {}", dir);
+            // TODO: Implement actual export logic
+        });
     }
 
     pub fn get_ui_handle(&self) -> Weak<AppWindow> {

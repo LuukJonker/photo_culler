@@ -11,6 +11,7 @@ export component Sidebar inherits Rectangle {
     callback settings-changed(float, float);
     callback load-raw();
     callback toggle-view-mode();
+    callback export-clicked();
 
     width: 280px;
     background: Theme.sidebar;
@@ -124,10 +125,11 @@ export component Sidebar inherits Rectangle {
 
         Rectangle { vertical-stretch: 1; } // Spacer
 
-        Button {
+        if (root.view-mode == 1) : Button {
             text: "EXPORT SELECTION";
             primary: true;
             height: 45px;
+            clicked => { root.export-clicked(); }
         }
     }
 }

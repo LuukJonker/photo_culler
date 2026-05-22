@@ -1,0 +1,95 @@
+name: Package Application
+
+on:
+  push:
+    branches:
+      - ci-cd
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libssl-dev libfontconfig1-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libraw-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.platform == 'macos'
+        run: brew install cmake libraw
+
+      - name: Install dependencies (Windows)
+        if: matrix.platform == 'windows'
+        run: choco install cmake
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - name: Build and Package
+        run: cargo packager --release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}
+          path: target/release/packager/*
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ci-cd
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: tmp-installers
+          pattern: installers-*
+          merge-multiple: true
+
+      - name: Commit and push installers
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          mkdir -p installers
+          rm -rf installers/*
+          cp -r tmp-installers/* installers/
+          
+          # Create a README
+          cat <<EOF > installers/README.md
+          # Photo Culler Installers
+          This folder contains the latest builds for all platforms.
+          - **Windows**: .msi
+          - **macOS**: .dmg
+          - **Linux**: .deb, .AppImage
+          EOF
+
+          git add installers/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update installers [skip ci]"
+            git push origin ${{ github.ref_name }}
+          fi
