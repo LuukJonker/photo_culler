@@ -6,7 +6,7 @@ edition = "2024"
 [package.metadata.packager]
 product-name = "Photo Culler"
 identifier = "com.photo-culler.app"
-authors = ["Luuk"]
+authors = ["Luuk Jonker"]
 description = "A photo culling application"
 
 [dependencies]
