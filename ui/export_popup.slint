@@ -4,6 +4,7 @@ import { Theme } from "theme.slint";
 export component ExportPopup inherits Rectangle {
     callback close();
     callback export(string);
+    callback browse();
     
     in-out property <string> output-directory: "";
 
@@ -45,9 +46,17 @@ export component ExportPopup inherits Rectangle {
                         text: "Output Directory:";
                         color: Theme.text;
                     }
-                    LineEdit {
-                        text <=> root.output-directory;
-                        placeholder-text: "Path to export directory...";
+                    HorizontalLayout {
+                        spacing: 10px;
+                        LineEdit {
+                            text <=> root.output-directory;
+                            placeholder-text: "Path to export directory...";
+                            horizontal-stretch: 1;
+                        }
+                        Button {
+                            text: "Browse...";
+                            clicked => { root.browse(); }
+                        }
                     }
                 }
             }

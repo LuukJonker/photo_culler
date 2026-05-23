@@ -23,13 +23,15 @@ export component AppWindow inherits Window {
     in-out property <bool> is_scherm: false;
     in property <int> photo_count: 0;
     in property <string> selected_photo_filename: "";
-    
+
     in-out property <bool> show_export_popup: false;
     in-out property <string> export_output_directory: "";
 
     in property <image> current_image;
     in property <[image]> filmstrip_images;
     in property <[int]> filmstrip_statuses;
+    in property <[bool]> filmstrip_is_shown;
+    in property <[int]> filmstrip_visible_indices;
 
     // Callbacks
     callback next_photo();
@@ -44,6 +46,7 @@ export component AppWindow inherits Window {
     callback scherm_photo(bool);
     callback set_view_filter(int);
     callback start_export(string);
+    callback browse_export_dir();
 
     // Navigation and Scrolling logic
     function navigate_right() {
@@ -62,7 +65,9 @@ export component AppWindow inherits Window {
 
     // Keyboard handler
     FocusScope {
-        init => { self.focus(); }
+        init => {
+            self.focus();
+        }
         key-pressed(event) => {
             // View mode toggle
             if (event.text == "v" || event.text == "V") {
@@ -71,11 +76,11 @@ export component AppWindow inherits Window {
             }
 
             // Navigation
-            if (event.text == Key.RightArrow) {
+            if (event.text == Key.RightArrow || event.text == "k") {
                 root.navigate_right();
                 return accept;
             }
-            if (event.text == Key.LeftArrow) {
+            if (event.text == Key.LeftArrow || event.text == "j") {
                 root.navigate_left();
                 return accept;
             }
@@ -117,17 +122,25 @@ export component AppWindow inherits Window {
                     selected-photo-status: root.filmstrip_statuses.length > root.selected_index ? root.filmstrip_statuses[root.selected_index] : 0;
                     photo-filename: root.selected_photo_filename;
                     is-scherm: root.is_scherm;
-                    set-view-filter(f) => { root.set_view_filter(f); }
-                    accept => { root.accept_photo(); }
-                    reject => { root.reject_photo(); }
-                    clear => { root.clear_filter(); }
-                    toggle-scherm => { 
+                    set-view-filter(f) => {
+                        root.set_view_filter(f);
+                    }
+                    accept => {
+                        root.accept_photo();
+                    }
+                    reject => {
+                        root.reject_photo();
+                    }
+                    clear => {
+                        root.clear_filter();
+                    }
+                    toggle-scherm => {
                         root.is_scherm = !root.is_scherm;
-                        root.scherm_photo(root.is_scherm); 
+                        root.scherm_photo(root.is_scherm);
                     }
                 }
 
-                if (root.view_mode == 0) : VerticalLayout {
+                if (root.view_mode == 0): VerticalLayout {
                     // Main Image View Area
                     Rectangle {
                         background: #000;
@@ -144,6 +157,8 @@ export component AppWindow inherits Window {
                     filmstrip := Filmstrip {
                         images: root.filmstrip_images;
                         statuses: root.filmstrip_statuses;
+                        is_shown: root.filmstrip_is_shown;
+                        visible_indices: root.filmstrip_visible_indices;
                         selected-index <=> root.selected_index;
                         select-photo(i) => {
                             root.select_photo(i);
@@ -151,7 +166,7 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                if (root.view_mode == 1) : GridView {
+                if (root.view_mode == 1): GridView {
                     images: root.filmstrip_images;
                     statuses: root.filmstrip_statuses;
                     view-filter: root.view_filter;
@@ -165,8 +180,12 @@ export component AppWindow inherits Window {
 
             Sidebar {
                 view-mode: root.view_mode;
-                toggle-view-mode => { root.view_mode = root.view_mode == 0 ? 1 : 0; }
-                export-clicked => { root.show_export_popup = true; }
+                toggle-view-mode => {
+                    root.view_mode = root.view_mode == 0 ? 1 : 0;
+                }
+                export-clicked => {
+                    root.show_export_popup = true;
+                }
                 selected-index: root.selected_index;
                 photo-count: root.photo_count;
                 brightness-val <=> root.brightness_val;
@@ -180,9 +199,14 @@ export component AppWindow inherits Window {
             }
         }
 
-        if (root.show_export_popup) : ExportPopup {
+        if (root.show_export_popup): ExportPopup {
             output-directory <=> root.export_output_directory;
-            close => { root.show_export_popup = false; }
+            close => {
+                root.show_export_popup = false;
+            }
+            browse => {
+                root.browse_export_dir();
+            }
             export(dir) => {
                 root.show_export_popup = false;
                 root.start_export(dir);

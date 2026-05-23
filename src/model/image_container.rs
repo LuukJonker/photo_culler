@@ -1,5 +1,6 @@
 use std::{
     error::Error,
+    ffi::OsStr,
     fs,
     io::BufReader,
     path::{Path, PathBuf},
@@ -21,14 +22,14 @@ pub struct ImageSettings {
     pub contrast: f32,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FilterState {
     Unknown,
     Accepted,
     Rejected,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterSettings {
     // If the photo is accepted or rejected
     pub filter: FilterState,
@@ -46,8 +47,7 @@ impl Default for FilterSettings {
     }
 }
 
-
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ImageContainerState {
     pub path: PathBuf,
     pub image_settings: ImageSettings,
@@ -208,6 +208,10 @@ impl ImageContainer {
         }
     }
 
+    pub fn path(&self) -> PathBuf {
+        self.path.clone()
+    }
+
     pub fn get_full_preview(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         // Check if we have a cached preview
         if let Ok(guard) = self.cached_preview.read() {
@@ -254,6 +258,18 @@ impl ImageContainer {
         let image = load_compressed_image(&self.path)?;
 
         Ok(dynamic_image_to_slint_image(&image.thumbnail(300, 300)))
+    }
+
+    pub fn export(&self, path: &Path) -> Result<(), ModelError> {
+        let image = load_compressed_image(&self.path)?;
+        let mut file_path = path.join(self.path.file_stem().ok_or(ModelError::WithMessage(
+            "Image path didn't have filename".into(),
+        ))?);
+        file_path.set_extension(".jpg");
+        println!("{:?}", file_path);
+        image.save_with_format(file_path, image::ImageFormat::Jpeg)?;
+
+        Ok(())
     }
 
     // Image settings

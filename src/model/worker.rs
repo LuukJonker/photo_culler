@@ -1,4 +1,5 @@
 use crossbeam::channel::{Receiver, Sender};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
@@ -40,8 +41,12 @@ impl Worker {
 
         let container = browser.at_index(index as usize);
         let image = container.get_full_preview()?;
-        
-        Ok(ResponseData::LoadedPhoto(index, image, container.get_state()))
+
+        Ok(ResponseData::LoadedPhoto(
+            index,
+            image,
+            container.get_state(),
+        ))
     }
 
     fn load_raw_photo(&self, index: u32) -> Result<ResponseData, ModelError> {
@@ -53,7 +58,11 @@ impl Worker {
         let container = browser.at_index(index as usize);
         let image = container.get_full_preview()?;
 
-        Ok(ResponseData::LoadedPhoto(index, image, container.get_state()))
+        Ok(ResponseData::LoadedPhoto(
+            index,
+            image,
+            container.get_state(),
+        ))
     }
 
     fn load_preview(&self, index: u32) -> Result<ResponseData, ModelError> {
@@ -62,9 +71,9 @@ impl Worker {
 
         let container = browser.at_index(index as usize);
         let image = container.get_thumbnail()?;
-        let filter = container.filter();
+        let state = container.get_state();
 
-        Ok(ResponseData::LoadedPreview(image, filter))
+        Ok(ResponseData::LoadedPreview(image, state))
     }
 
     fn load_directory(&mut self, path: String) -> Result<ResponseData, ModelError> {
@@ -86,6 +95,16 @@ impl Worker {
         Ok(ResponseData::LoadedDirectory(length as u32))
     }
 
+    fn export_image(&self, index: u32, output_dir_path: PathBuf) -> Result<(), ModelError> {
+        let browser_lock = self.browser.read().unwrap();
+        let browser = browser_lock.as_ref().unwrap();
+
+        let container = browser.at_index(index as usize);
+        container.export(&output_dir_path)?;
+
+        Ok(())
+    }
+
     fn handle_request(
         &mut self,
         cmd: Commands,
@@ -96,6 +115,14 @@ impl Worker {
             Commands::LoadThumbnail(index) => ResponseAction::Respond(self.load_preview(index)),
 
             Commands::LoadDirectory(path) => ResponseAction::Respond(self.load_directory(path)),
+
+            Commands::ExportImage(index, output_dir_path) => {
+                if let Err(err) = self.export_image(index, output_dir_path) {
+                    return ResponseAction::Respond(Err(err));
+                }
+
+                ResponseAction::Nothing
+            }
 
             Commands::AdjustImagesettings(id, settings) => {
                 self.browser

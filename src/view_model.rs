@@ -1,17 +1,42 @@
 use slint::{Model, Weak};
 
 use crate::commands::{Commands, Request};
-use crate::model::image_container::{FilterState, ImageSettings};
+use crate::model::image_container::{FilterState, ImageContainerState, ImageSettings};
 use crossbeam::channel::Sender;
 use std::error::Error;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 slint::include_modules!();
+
+pub enum FilmstripFilter {
+    ShowAll,
+    ShowAccepted,
+    ShowRejected,
+}
+
+impl FilmstripFilter {
+    pub fn included(&self, filter_settings: &FilterState) -> bool {
+        match self {
+            Self::ShowAll => true,
+            Self::ShowAccepted => matches!(filter_settings, FilterState::Accepted),
+            Self::ShowRejected => matches!(filter_settings, FilterState::Rejected),
+        }
+    }
+}
+
+impl Default for FilmstripFilter {
+    fn default() -> Self {
+        Self::ShowAll
+    }
+}
 
 #[derive(Default)]
 pub struct AppState {
     pub selected_photo_id: Option<u32>,
     pub number_photos: u32,
+    pub image_states: Vec<ImageContainerState>,
+    pub filter: FilmstripFilter,
 }
 
 pub struct ViewModel {
@@ -154,7 +179,8 @@ impl ViewModel {
 
                 sender
                     .send(
-                        Commands::SetNormalFilter(selected_photo_id, FilterState::Accepted).request(),
+                        Commands::SetNormalFilter(selected_photo_id, FilterState::Accepted)
+                            .request(),
                     )
                     .unwrap();
             }
@@ -176,7 +202,8 @@ impl ViewModel {
 
                 sender
                     .send(
-                        Commands::SetNormalFilter(selected_photo_id, FilterState::Rejected).request(),
+                        Commands::SetNormalFilter(selected_photo_id, FilterState::Rejected)
+                            .request(),
                     )
                     .unwrap();
             }
@@ -210,20 +237,81 @@ impl ViewModel {
 
                 sender
                     .send(
-                        Commands::SetNormalFilter(selected_photo_id, FilterState::Unknown).request(),
+                        Commands::SetNormalFilter(selected_photo_id, FilterState::Unknown)
+                            .request(),
                     )
                     .unwrap();
             }
         });
 
-        self.ui.on_set_view_filter(move |filter| {
-            println!("View filter changed to: {}", filter);
-            // TODO: Implement actual filtering logic in the model
+        let state = self.appstate.clone();
+        let weak = self.get_ui_handle();
+
+        self.ui.on_set_view_filter(move |filter_id| {
+            let filter = match filter_id {
+                0 => FilmstripFilter::ShowAll,
+                1 => FilmstripFilter::ShowAccepted,
+                2 => FilmstripFilter::ShowRejected,
+                _ => {
+                    eprintln!("[BUG] Wrong filter id was given");
+                    FilmstripFilter::ShowAll
+                }
+            };
+
+            let mut state = state.lock().unwrap();
+            println!("{:?}", state.image_states[0]);
+            let is_shown: Vec<bool> = state
+                .image_states
+                .iter()
+                .map(|container| filter.included(&container.filter_settings.filter))
+                .collect();
+
+            let mut visible_indices = Vec::new();
+            let mut current_visible_idx = 0;
+            for shown in &is_shown {
+                if *shown {
+                    visible_indices.push(current_visible_idx);
+                    current_visible_idx += 1;
+                } else {
+                    visible_indices.push(-1);
+                }
+            }
+
+            weak.upgrade_in_event_loop(move |handle| {
+                let is_shown_model = handle.get_filmstrip_is_shown();
+                for (i, shown) in is_shown.iter().enumerate() {
+                    is_shown_model.set_row_data(i, *shown);
+                }
+
+                let visible_indices_model =
+                    std::rc::Rc::new(slint::VecModel::from(visible_indices));
+                handle.set_filmstrip_visible_indices(slint::ModelRc::from(visible_indices_model));
+            })
+            .unwrap();
+
+            state.filter = filter;
         });
 
+        let state = self.appstate.clone();
+        let sender = self.sender.clone();
+
         self.ui.on_start_export(move |dir| {
-            println!("Exporting to: {}", dir);
-            // TODO: Implement actual export logic
+            for (i, image_info) in state.lock().unwrap().image_states.iter().enumerate() {
+                if matches!(image_info.filter_settings.filter, FilterState::Accepted) {
+                    sender
+                        .send(Commands::ExportImage(i as u32, dir.to_string().into()).request())
+                        .unwrap();
+                }
+            }
+        });
+
+        let weak = self.ui.as_weak();
+        self.ui.on_browse_export_dir(move || {
+            if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                let _ = weak.upgrade_in_event_loop(move |handle| {
+                    handle.set_export_output_directory(folder.to_string_lossy().into_owned().into());
+                });
+            }
         });
     }
 

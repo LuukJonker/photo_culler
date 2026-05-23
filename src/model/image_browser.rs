@@ -1,7 +1,9 @@
 use crate::error::ModelError;
 use crate::model::disk_writer::{read_contents, write_contents};
 use crate::model::image_container::{ImageContainer, ImageContainerState, ImageSettings};
-use serde::{Serialize, Deserialize};
+use mimetype_detector::{MimeType, TEXT_HTML, detect_file};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -25,6 +27,10 @@ fn get_all_files(folder_path: &Path) -> Result<Vec<ImageContainer>, ModelError> 
         .filter_map(|res| res.ok())
         .map(|e| e.path())
         .filter(|p| p.is_file())
+        .filter(|p| match detect_file(p) {
+            Ok(mime) => mime.kind().is_image(),
+            Err(_) => false,
+        })
         .map(ImageContainer::new)
         .collect())
 }
@@ -37,14 +43,21 @@ struct CollectionTemplate {
 
 impl ImageBrowser {
     pub fn new(folder_path: PathBuf) -> Result<Self, ModelError> {
-        if let Ok(temp) = read_contents::<CollectionTemplate>(&folder_path) {
-            return Ok(Self {
-                images: temp.images_states.iter().map(|state| ImageContainer::from_state(state.clone())).collect(),
-                root_folder: folder_path,
-            })
-        }
+        let mut entries = get_all_files(&folder_path)?;
 
-        let entries = get_all_files(&folder_path)?;
+        // Try and get the settings from the previous session
+        if let Ok(temp) = read_contents::<CollectionTemplate>(&folder_path) {
+            let mut image_states: HashMap<PathBuf, ImageContainerState> = HashMap::from_iter(
+                temp.images_states
+                    .iter()
+                    .map(|s| (s.path.clone(), s.clone())),
+            );
+            for entry in entries.iter_mut() {
+                if let Some(state) = image_states.remove(&entry.path()) {
+                    *entry = ImageContainer::from_state(state);
+                }
+            }
+        }
 
         Ok(Self {
             images: entries,

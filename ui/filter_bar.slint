@@ -9,7 +9,7 @@ component FilterButton inherits Rectangle {
     height: 30px;
     background: active ? Theme.accent : #333;
     border-radius: 15px;
-    
+
     HorizontalLayout {
         padding-left: 15px;
         padding-right: 15px;
@@ -23,7 +23,9 @@ component FilterButton inherits Rectangle {
     }
 
     TouchArea {
-        clicked => { root.clicked(); }
+        clicked => {
+            root.clicked();
+        }
     }
 }
 
@@ -50,7 +52,9 @@ component ActionButton inherits Rectangle {
     }
 
     touch := TouchArea {
-        clicked => { root.clicked(); }
+        clicked => {
+            root.clicked();
+        }
     }
 }
 
@@ -60,7 +64,7 @@ export component FilterBar inherits Rectangle {
     in property <bool> is-scherm: false;
     in property <int> view-mode: 0; // 0: Single, 1: Grid
     in property <string> photo-filename: "";
-    
+
     callback set-view-filter(int);
     callback accept();
     callback reject();
@@ -76,55 +80,55 @@ export component FilterBar inherits Rectangle {
         padding-left: 20px;
         padding-right: 20px;
         spacing: 20px;
-        
+
         // --- View Filtering (Left) ---
         HorizontalLayout {
             spacing: 8px;
             alignment: start;
-            
+
             VerticalLayout {
                 alignment: center;
-                Text { 
-                    text: "VIEW:"; 
-                    color: Theme.text-dim; 
-                    font-size: 11px; 
+                Text {
+                    text: "FILTER:";
+                    color: Theme.text-dim;
+                    font-size: 11px;
                     font-weight: 800;
                 }
             }
-            
+
             VerticalLayout {
                 alignment: center;
                 HorizontalLayout {
                     spacing: 8px;
-                    FilterButton { 
-                        text: "ALL"; 
-                        active: root.active-view-filter == 0; 
-                        clicked => { root.set-view-filter(0); }
+                    FilterButton {
+                        text: "ALL";
+                        active: root.active-view-filter == 0;
+                        clicked => {
+                            root.set-view-filter(0);
+                        }
                     }
-                    FilterButton { 
-                        text: "ACCEPTED"; 
-                        active: root.active-view-filter == 1; 
-                        clicked => { root.set-view-filter(1); }
+
+                    FilterButton {
+                        text: "ACCEPTED";
+                        active: root.active-view-filter == 1;
+                        clicked => {
+                            root.set-view-filter(1);
+                        }
                     }
-                    FilterButton { 
-                        text: "REJECTED"; 
-                        active: root.active-view-filter == 2; 
-                        clicked => { root.set-view-filter(2); }
-                    }
-                    
-                    Rectangle { width: 10px; } // Spacer
-                    
-                    FilterButton { 
-                        text: "SCHERM"; 
-                        active: root.is-scherm; 
-                        clicked => { root.toggle-scherm(); }
+
+                    FilterButton {
+                        text: "REJECTED";
+                        active: root.active-view-filter == 2;
+                        clicked => {
+                            root.set-view-filter(2);
+                        }
                     }
                 }
             }
         }
 
         // --- Filename (Center) ---
-        if (root.photo-filename != "") : VerticalLayout {
+        if (root.photo-filename != ""): VerticalLayout {
             alignment: center;
             HorizontalLayout {
                 spacing: 10px;
@@ -135,6 +139,7 @@ export component FilterBar inherits Rectangle {
                     font-size: 14px;
                     vertical-alignment: center;
                 }
+
                 Text {
                     text: root.photo-filename;
                     color: Theme.text;
@@ -147,16 +152,16 @@ export component FilterBar inherits Rectangle {
         }
 
         // --- Current Photo Actions (Right) ---
-        if (root.view-mode == 0) : HorizontalLayout {
+        if (root.view-mode == 0): HorizontalLayout {
             spacing: 12px;
             alignment: end;
-            
+
             VerticalLayout {
                 alignment: center;
-                Text { 
-                    text: "SET STATUS:"; 
-                    color: Theme.text-dim; 
-                    font-size: 11px; 
+                Text {
+                    text: "STATUS:";
+                    color: Theme.text-dim;
+                    font-size: 11px;
                     font-weight: 800;
                 }
             }
@@ -165,23 +170,22 @@ export component FilterBar inherits Rectangle {
                 alignment: center;
                 HorizontalLayout {
                     spacing: 12px;
-                    ActionButton { 
-                        text: "✓"; 
-                        icon-color: Theme.success; 
+                    ActionButton {
+                        text: "✓";
+                        icon-color: Theme.success;
                         active: root.selected-photo-status == 1;
-                        clicked => { root.accept(); }
+                        clicked => {
+                            root.accept();
+                        }
                     }
-                    ActionButton { 
-                        text: "✕"; 
-                        icon-color: Theme.danger; 
+
+                    ActionButton {
+                        text: "✕";
+                        icon-color: Theme.danger;
                         active: root.selected-photo-status == 2;
-                        clicked => { root.reject(); }
-                    }
-                    ActionButton { 
-                        text: "↺"; 
-                        icon-color: Theme.text-dim; 
-                        active: root.selected-photo-status == 0;
-                        clicked => { root.clear(); }
+                        clicked => {
+                            root.reject();
+                        }
                     }
                 }
             }

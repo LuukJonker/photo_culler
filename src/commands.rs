@@ -1,8 +1,11 @@
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, atomic::AtomicBool};
 
 use crate::error::ModelError;
-use crate::model::image_container::{FilterSettings, FilterState, ImageSettings};
+use crate::model::image_container::{
+    FilterSettings, FilterState, ImageContainerState, ImageSettings,
+};
 use rsraw::ProcessedImage;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
@@ -102,6 +105,8 @@ pub enum Commands {
     LoadDirectory(String),
     LoadThumbnail(u32),
 
+    ExportImage(u32, PathBuf),
+
     AdjustImagesettings(u32, ImageSettings),
     SetNormalFilter(u32, FilterState),
     SetSchermFilter(u32, bool),
@@ -120,8 +125,12 @@ pub struct Response {
 
 pub enum ResponseData {
     LoadedDirectory(u32),
-    LoadedPhoto(u32, SharedPixelBuffer<Rgb8Pixel>, crate::model::image_container::ImageContainerState),
-    LoadedPreview(SharedPixelBuffer<Rgb8Pixel>, FilterSettings),
+    LoadedPhoto(
+        u32,
+        SharedPixelBuffer<Rgb8Pixel>,
+        crate::model::image_container::ImageContainerState,
+    ),
+    LoadedPreview(SharedPixelBuffer<Rgb8Pixel>, ImageContainerState),
 }
 
 pub enum RenderRequest {
