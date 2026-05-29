@@ -9,7 +9,8 @@ mod response_listener;
 mod view_model;
 
 use crossbeam::channel::unbounded;
-use std::{env::args, error::Error, thread};
+use std::{env::args, error::Error, fmt::Debug, thread};
+use tracing::info;
 
 use crate::{
     commands::{Commands, Response},
@@ -18,7 +19,20 @@ use crate::{
     view_model::ViewModel,
 };
 
+/// The main entry point of the Photo Culler application.
+///
+/// It initializes the model, view model, and response listener,
+/// processes command line arguments for the initial directory,
+/// and starts the main application loop.
 fn main() -> Result<(), Box<dyn Error>> {
+    // Setup logging
+    let file_appender = tracing_appender::rolling::daily("logs", "app.log");
+    let (non_blocking, _) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::fmt().with_writer(non_blocking).init();
+
+    info!("Application starting...");
+
     // Channel for the responses back to the view model
     let model = Model::new();
     let (response_sender, response_receiver) = unbounded::<Response>();
@@ -36,8 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Commands::LoadDirectory(
             args()
                 .nth(1)
-                .ok_or_else(|| "No directory specified".to_string())?
-                .into(),
+                .ok_or_else(|| "No directory specified".to_string())?,
         )
         .request(),
     )?;

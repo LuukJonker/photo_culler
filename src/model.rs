@@ -14,22 +14,16 @@ use crate::model::worker::Worker;
 // use crate::model::render_worker::RenderThread;
 use crossbeam::channel::{Receiver, Select, Sender, bounded, unbounded};
 
+/// A wrapper around a Request to allow for prioritization in a BinaryHeap.
 struct RequestWithPriority {
+    /// The request to be processed.
     request: Request,
+    /// The priority level of the request.
     priority: Priority,
 }
 
-impl RequestWithPriority {
-    fn new(request: Request) -> Self {
-        Self {
-            priority: request.priority(),
-            request,
-        }
-    }
-}
-
-/// Still have to figure out how this works with the eq
-///
+/// Still have to figure out how this works with the eq                                                                                                                             
+///                                                                                                                                                                                 
 impl Eq for RequestWithPriority {}
 
 impl PartialEq for RequestWithPriority {
@@ -50,13 +44,24 @@ impl Ord for RequestWithPriority {
     }
 }
 
-///
+impl RequestWithPriority {
+    /// Creates a new RequestWithPriority from a Request.
+    fn new(request: Request) -> Self {
+        Self {
+            priority: request.priority(),
+            request,
+        }
+    }
+}
 
+/// The shared state of the model, accessible by workers.
 #[derive(Clone, Default)]
 pub struct ModelState {
+    /// The image browser instance, wrapped for thread-safe access.
     pub browser: Arc<RwLock<Option<ImageBrowser>>>,
 }
 
+/// The core model that manages job scheduling and workers.
 pub struct Model {
     // Channel for the incoming job requests from the view model
     incoming_sender: Sender<Request>,
@@ -81,6 +86,7 @@ pub struct Model {
 }
 
 impl Model {
+    /// Creates a new Model instance with its internal communication channels.
     pub fn new() -> Self {
         // Incoming and outgoing channels, for dev purposes
         let (incoming_sender, incoming_receiver) = unbounded::<Request>();
@@ -102,14 +108,17 @@ impl Model {
         }
     }
 
+    /// Returns a sender for dispatching requests to the model.
     pub fn get_sender(&self) -> Sender<Request> {
         self.incoming_sender.clone()
     }
 
+    /// Returns a receiver for workers to pull jobs from the model.
     pub fn get_receiver(&self) -> Receiver<Request> {
         self.outgoing_receiver.clone()
     }
 
+    /// The internal event loop of the model manager, handling job prioritization.
     fn inner(&mut self) {
         loop {
             // Rebuild the selector every iteration
@@ -169,6 +178,7 @@ impl Model {
         }
     }
 
+    /// Spawns worker threads and starts the model's management loop.
     pub fn run(mut self, response_sender: Sender<Response>) -> Vec<JoinHandle<()>> {
         let mut worker_handles = Vec::new();
 

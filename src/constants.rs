@@ -1,2 +1,2 @@
-pub const APP_NAME: &'static str = "greenroom";
-pub const APP_AUTHOR: &'static str = "luuk_jonker";
+pub const APP_NAME: &str = "greenroom";
+pub const APP_AUTHOR: &str = "luuk";

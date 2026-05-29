@@ -30,7 +30,6 @@ export component AppWindow inherits Window {
     in property <image> current_image;
     in property <[image]> filmstrip_images;
     in property <[int]> filmstrip_statuses;
-    in property <[bool]> filmstrip_is_shown;
     in property <[int]> filmstrip_visible_indices;
 
     // Callbacks
@@ -50,17 +49,11 @@ export component AppWindow inherits Window {
 
     // Navigation and Scrolling logic
     function navigate_right() {
-        if (root.selected_index < root.photo_count - 1) {
-            root.selected_index += 1;
-            root.next_photo();
-        }
+        root.next_photo();
     }
 
     function navigate_left() {
-        if (root.selected_index > 0) {
-            root.selected_index -= 1;
-            root.prev_photo();
-        }
+        root.prev_photo();
     }
 
     // Keyboard handler
@@ -74,19 +67,18 @@ export component AppWindow inherits Window {
                 root.view_mode = root.view_mode == 0 ? 1 : 0;
                 return accept;
             }
-
-            // Navigation
-            if (event.text == Key.RightArrow || event.text == "k") {
-                root.navigate_right();
-                return accept;
-            }
-            if (event.text == Key.LeftArrow || event.text == "j") {
-                root.navigate_left();
-                return accept;
-            }
-
-            // Set filters (only in single mode)
             if (root.view_mode == 0) {
+              // Navigation
+              if (event.text == Key.RightArrow || event.text == "k") {
+                    root.navigate_right();
+                    return accept;
+                }
+                if (event.text == Key.LeftArrow || event.text == "j") {
+                    root.navigate_left();
+                    return accept;
+                }
+
+              // Set filters (only in single mode)
                 if (event.text == "a" || event.text == "A") {
                     root.accept_photo();
                     return accept;
@@ -157,7 +149,6 @@ export component AppWindow inherits Window {
                     filmstrip := Filmstrip {
                         images: root.filmstrip_images;
                         statuses: root.filmstrip_statuses;
-                        is_shown: root.filmstrip_is_shown;
                         visible_indices: root.filmstrip_visible_indices;
                         selected-index <=> root.selected_index;
                         select-photo(i) => {

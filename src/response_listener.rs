@@ -6,11 +6,8 @@ use crate::{
     view_model::{AppState, AppWindow},
 };
 use crossbeam::channel::{Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-};
 
 pub struct ResponseListener {
     // Sender to send requests to the model
@@ -50,7 +47,7 @@ impl ResponseListener {
                     match data {
                         ResponseData::LoadedPhoto(id, buffer, state) => {
                             // If not good photo, dont show
-                            if Some(id) != self.appstate.lock().unwrap().selected_photo_id {
+                            if Some(id) != self.appstate.lock().unwrap().current_photo_id {
                                 continue;
                             }
 
@@ -75,11 +72,13 @@ impl ResponseListener {
                         ResponseData::LoadedDirectory(num_images) => {
                             // Update the state
                             let mut state = self.appstate.lock().unwrap();
-                            state.selected_photo_id = Some(0);
-                            state.number_photos = num_images;
+                            state.current_photo_id = Some(0);
+                            state.current_view_index = Some(0);
+                            state.num_photos = num_images;
                             state
-                                .image_states
+                                .photos_infos
                                 .resize_with(num_images as usize, ImageContainerState::default);
+                            state.view_images_mapping = (0..num_images).collect();
 
                             // Initialize the filmstrip with empty placeholder images
                             self.ui_handle
@@ -95,11 +94,6 @@ impl ResponseListener {
                                     let status_model =
                                         std::rc::Rc::new(VecModel::from(empty_statuses));
                                     handle.set_filmstrip_statuses(ModelRc::from(status_model));
-
-                                    let empty_is_shown = vec![true; num_images as usize];
-                                    let is_shown_model =
-                                        std::rc::Rc::new(VecModel::from(empty_is_shown));
-                                    handle.set_filmstrip_is_shown(ModelRc::from(is_shown_model));
 
                                     let initial_visible_indices: Vec<i32> =
                                         (0..num_images as i32).collect();
@@ -127,10 +121,7 @@ impl ResponseListener {
                                 };
 
                                 let mut state = self.appstate.lock().unwrap();
-                                let preview_is_shown =
-                                    state.filter.included(&image_info.filter_settings.filter);
-
-                                state.image_states[index as usize] = image_info;
+                                state.photos_infos[index as usize] = image_info;
 
                                 self.ui_handle
                                     .upgrade_in_event_loop(move |handle| {
@@ -141,10 +132,6 @@ impl ResponseListener {
                                         handle
                                             .get_filmstrip_statuses()
                                             .set_row_data(index as usize, state_repr);
-
-                                        handle
-                                            .get_filmstrip_is_shown()
-                                            .set_row_data(index as usize, preview_is_shown);
                                     })
                                     .expect("Load preview event loop error");
                             }

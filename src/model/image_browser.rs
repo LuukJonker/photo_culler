@@ -7,11 +7,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Manages a collection of images within a directory.
 pub struct ImageBrowser {
-    // Path to the root folder
+    /// The root directory containing the images.
     root_folder: PathBuf,
 
-    // All images in the folder
+    /// List of image containers for all images found in the directory.
     images: Vec<ImageContainer>,
 }
 
@@ -35,6 +36,7 @@ fn get_all_files(folder_path: &Path) -> Result<Vec<ImageContainer>, ModelError> 
         .collect())
 }
 
+/// Template for serializing the collection's state to disk.
 #[derive(Serialize, Deserialize)]
 struct CollectionTemplate {
     view_state: (),
@@ -42,6 +44,7 @@ struct CollectionTemplate {
 }
 
 impl ImageBrowser {
+    /// Creates a new ImageBrowser for the specified folder, loading any existing state.
     pub fn new(folder_path: PathBuf) -> Result<Self, ModelError> {
         let mut entries = get_all_files(&folder_path)?;
 
@@ -65,18 +68,22 @@ impl ImageBrowser {
         })
     }
 
+    /// Returns the number of images in the collection.
     pub fn len(&self) -> usize {
         self.images.len()
     }
 
+    /// Returns a reference to the image container at the specified index.
     pub fn at_index(&self, index: usize) -> &ImageContainer {
         &self.images[index]
     }
 
+    /// Returns a mutable reference to the image container at the specified index.
     pub fn mut_at_index(&mut self, index: usize) -> &mut ImageContainer {
         &mut self.images[index]
     }
 
+    /// Persists the current state of all images in the collection to disk.
     pub fn save_to_disk(&self) -> Result<(), ModelError> {
         let mut images_states = Vec::with_capacity(self.len());
         for image in &self.images {

@@ -14,31 +14,41 @@ use rsraw::{BIT_DEPTH_8, RawImage};
 use serde::{Deserialize, Serialize};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
+mod image_operations;
 mod jpgfromraw;
 
+/// Settings for image adjustment.
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct ImageSettings {
+    /// Brightness offset.
     pub brightness: f32,
+    /// Contrast multiplier.
     pub contrast: f32,
 }
 
+/// The acceptance state of an image.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FilterState {
+    /// Initial state, no action taken.
     Unknown,
+    /// Image marked for keeping.
     Accepted,
+    /// Image marked for deletion or skipping.
     Rejected,
 }
 
+/// Container for all filter-related settings of an image.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterSettings {
-    // If the photo is accepted or rejected
+    /// Whether the photo is accepted, rejected, or unknown.
     pub filter: FilterState,
 
-    // If it should be saved for the "scherm" in the kelder
+    /// Whether the image is flagged for a specific use case ("scherm").
     pub scherm: bool,
 }
 
 impl Default for FilterSettings {
+    /// Returns a default FilterSettings with Unknown state and scherm set to false.
     fn default() -> Self {
         FilterSettings {
             filter: FilterState::Unknown,
@@ -47,27 +57,32 @@ impl Default for FilterSettings {
     }
 }
 
+/// Serializable state of an image container, used for persistence.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ImageContainerState {
+    /// Original file path of the image.
     pub path: PathBuf,
+    /// User-applied image adjustments.
     pub image_settings: ImageSettings,
+    /// User-applied filter settings.
     pub filter_settings: FilterSettings,
 }
 
+/// Represents a single image, its metadata, and applied settings.
 pub struct ImageContainer {
-    // Full path to the image location of the drive
+    /// Full path to the image file on disk.
     path: PathBuf,
 
-    // The metadata stored in an exif struct
+    /// Metadata extracted from the image's EXIF data.
     metadata: Option<Vec<Field>>,
 
-    // Cached preview
+    /// Cached preview image for faster rendering.
     cached_preview: RwLock<Option<DynamicImage>>,
 
-    // The settings of the image
+    /// Applied image adjustments (brightness, contrast).
     settings: ImageSettings,
 
-    // The state of the filter
+    /// Current filter state (Accepted/Rejected/Scherm).
     filter_state: FilterSettings,
 }
 
@@ -118,26 +133,19 @@ fn load_compressed_image(path: &Path) -> Result<image::DynamicImage, ModelError>
 }
 
 fn load_full_raw_image(path: &Path, use_half_size: bool) -> Result<RawImage, ModelError> {
-    let start_total = std::time::Instant::now();
     let raw_bytes = fs::read(path)?;
-    println!("fs::read took {:?}", start_total.elapsed());
 
-    let start_open = std::time::Instant::now();
     let mut raw_image = match RawImage::open(&raw_bytes) {
         Ok(v) => v,
         Err(e) => return Err(ModelError::WithMessage(e.to_string())),
     };
-    println!("RawImage::open took {:?}", start_open.elapsed());
 
     raw_image.set_half_size(use_half_size);
 
     // Unpack it here so the error propagates to your UI gracefully
-    let start_unpack = std::time::Instant::now();
     if let Err(e) = raw_image.unpack() {
         return Err(ModelError::WithMessage(e.to_string()));
     }
-    println!("raw_image.unpack took {:?}", start_unpack.elapsed());
-    println!("load_full_raw_image total took {:?}", start_total.elapsed());
 
     Ok(raw_image)
 }
@@ -188,6 +196,7 @@ fn dynamic_image_to_slint_image(dyn_img: &DynamicImage) -> SharedPixelBuffer<Rgb
 }
 
 impl ImageContainer {
+    /// Creates a new ImageContainer for the given path.
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
@@ -198,6 +207,7 @@ impl ImageContainer {
         }
     }
 
+    /// Reconstructs an ImageContainer from a stored state.
     pub fn from_state(state: ImageContainerState) -> Self {
         Self {
             path: state.path,
@@ -208,10 +218,12 @@ impl ImageContainer {
         }
     }
 
+    /// Returns a clone of the image's file path.
     pub fn path(&self) -> PathBuf {
         self.path.clone()
     }
 
+    /// Generates a preview of the image with settings applied.
     pub fn get_full_preview(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         // Check if we have a cached preview
         if let Ok(guard) = self.cached_preview.read() {
@@ -241,12 +253,14 @@ impl ImageContainer {
         Ok(shared_image)
     }
 
+    /// Loads and processes the full RAW image data.
     pub fn get_raw_image(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         Ok(raw_image_to_slint_image(load_full_raw_image(
             &self.path, false,
         )?))
     }
 
+    /// Generates a small thumbnail of the image.
     pub fn get_thumbnail(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         // Check if we have a cached preview
         if let Ok(guard) = self.cached_preview.read() {
@@ -260,32 +274,35 @@ impl ImageContainer {
         Ok(dynamic_image_to_slint_image(&image.thumbnail(300, 300)))
     }
 
+    /// Exports the image as a JPEG to the specified directory.
     pub fn export(&self, path: &Path) -> Result<(), ModelError> {
         let image = load_compressed_image(&self.path)?;
         let mut file_path = path.join(self.path.file_stem().ok_or(ModelError::WithMessage(
             "Image path didn't have filename".into(),
         ))?);
-        file_path.set_extension(".jpg");
-        println!("{:?}", file_path);
+        file_path.set_extension("jpg");
+
         image.save_with_format(file_path, image::ImageFormat::Jpeg)?;
 
         Ok(())
     }
 
-    // Image settings
+    /// Returns a clone of the current image adjustments.
     pub fn settings(&self) -> ImageSettings {
         self.settings.clone()
     }
 
+    /// Updates the image adjustments.
     pub fn set_settings(&mut self, settings: ImageSettings) {
         self.settings = settings;
     }
 
-    // Filter settings
+    /// Returns a clone of the current filter settings.
     pub fn filter(&self) -> FilterSettings {
         self.filter_state.clone()
     }
 
+    /// Updates the filter settings.
     pub fn set_filter(&mut self, filter: FilterSettings) {
         self.filter_state = filter;
     }
@@ -302,10 +319,12 @@ impl ImageContainer {
         Ok(exif.fields().cloned().collect())
     }
 
+    /// Returns true if metadata has been loaded.
     pub fn is_metadata_loaded(&self) -> bool {
         self.metadata.is_some()
     }
 
+    /// Returns the image's EXIF fields, loading them if necessary.
     pub fn fields(&mut self) -> Vec<Field> {
         if let Some(exif) = self.metadata.as_ref() {
             return exif.clone();
@@ -314,7 +333,7 @@ impl ImageContainer {
         self.load_metadata().unwrap()
     }
 
-    // Serialization and deserialization
+    /// Returns the serializable state of the container.
     pub fn get_state(&self) -> ImageContainerState {
         ImageContainerState {
             path: self.path.clone(),

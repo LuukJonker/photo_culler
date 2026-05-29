@@ -19,12 +19,16 @@ crossbeam = "0.8.4"
 image = "0.25.9"
 kamadak-exif = "0.6.1"
 mimetype-detector = "0.3.9"
+nalgebra = "0.35.0"
 rfd = "0.15.2"
 rsraw = "0.1.1"
 serde = "1.0.228"
 serde_json = "1.0.149"
 slint = "1.15"
 thiserror = "2.0.18"
+tracing = "0.1.44"
+tracing-appender = "0.2.5"
+tracing-subscriber = "0.3.23"
 
 
 [build-dependencies]
