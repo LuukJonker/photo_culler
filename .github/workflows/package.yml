@@ -25,8 +25,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
+      # Install standard Rust for macOS and Linux
+      - name: Install Rust (macOS/Linux)
+        if: matrix.platform != 'windows'
         uses: dtolnay/rust-toolchain@stable
+
+      # Install GNU Rust for Windows to compile LibRaw properly
+      - name: Install Rust (Windows GNU)
+        if: matrix.platform == 'windows'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-gnu 
+          targets: x86_64-pc-windows-gnu
 
       - name: Install dependencies (Linux)
         if: matrix.platform == 'linux'
@@ -38,29 +48,41 @@ jobs:
         if: matrix.platform == 'macos'
         run: brew install cmake libraw
 
-      - name: Install dependencies (Windows)
+      # Install MSYS2 to ensure GCC/MinGW is available on Windows
+      - name: Setup MSYS2
         if: matrix.platform == 'windows'
-        run: choco install cmake
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-clang
 
       - name: Install cargo-packager
         run: cargo install cargo-packager --locked
 
-      - name: Build and Package
-        run: cargo packager --release
+      - name: Build
+        run: cargo build --release
+
+      # Force output to a dedicated 'dist' directory so we know exactly where the installers are
+      - name: Package
+        run: cargo packager --release --out-dir dist
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.platform }}
-          path: target/release/packager/*
+          path: dist/*
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # Checkout the MAIN branch instead of the trigger branch (ci-cd)
       - uses: actions/checkout@v4
         with:
-          ref: ci-cd
+          ref: main
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -69,27 +91,37 @@ jobs:
           pattern: installers-*
           merge-multiple: true
 
-      - name: Commit and push installers
+      - name: Commit and push installers to main
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          
+          # Create installers directory if it doesn't exist
           mkdir -p installers
+          
+          # Clear old installers to avoid bloating the repo with stale versions
           rm -rf installers/*
+          
+          # Copy newly downloaded artifacts
           cp -r tmp-installers/* installers/
           
           # Create a README
           cat <<EOF > installers/README.md
-          # Photo Culler Installers
+          # Green Room Installers
           This folder contains the latest builds for all platforms.
-          - **Windows**: .msi
-          - **macOS**: .dmg
+          - **Windows**: .msi, .nsis
+          - **macOS**: .dmg, .app
           - **Linux**: .deb, .AppImage
           EOF
 
+          # Stage the files
           git add installers/
+          
+          # Commit and push to main
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update installers [skip ci]"
-            git push origin ${{ github.ref_name }}
+            # We add [skip ci] so pushing to main doesn't accidentally trigger other workflows
+            git commit -m "chore: Update release installers [skip ci]"
+            git push origin main
           fi

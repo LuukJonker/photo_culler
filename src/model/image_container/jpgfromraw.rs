@@ -2,7 +2,6 @@ use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::os::unix::fs::FileExt;
 use std::path::Path;
 
 use crate::error::ModelError;
