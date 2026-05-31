@@ -263,10 +263,10 @@ impl ImageContainer {
     /// Generates a small thumbnail of the image.
     pub fn get_thumbnail(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         // Check if we have a cached preview
-        if let Ok(guard) = self.cached_preview.read() {
-            if let Some(cached) = guard.as_ref() {
-                return Ok(dynamic_image_to_slint_image(&cached.thumbnail(300, 300)));
-            }
+        if let Ok(guard) = self.cached_preview.read()
+            && let Some(cached) = guard.as_ref()
+        {
+            return Ok(dynamic_image_to_slint_image(&cached.thumbnail(300, 300)));
         }
 
         let image = load_compressed_image(&self.path)?;

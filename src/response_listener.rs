@@ -45,7 +45,7 @@ impl ResponseListener {
 
                 if let Ok(data) = value {
                     match data {
-                        ResponseData::LoadedPhoto(id, buffer, state) => {
+                        ResponseData::Photo(id, buffer, state) => {
                             // If not good photo, dont show
                             if Some(id) != self.appstate.lock().unwrap().current_photo_id {
                                 continue;
@@ -69,7 +69,7 @@ impl ResponseListener {
                                 .expect("Load photo event loop error");
                         }
 
-                        ResponseData::LoadedDirectory(num_images) => {
+                        ResponseData::Directory(num_images) => {
                             // Update the state
                             let mut state = self.appstate.lock().unwrap();
                             state.current_photo_id = Some(0);
@@ -112,7 +112,7 @@ impl ResponseListener {
                             }
                         }
 
-                        ResponseData::LoadedPreview(buffer, image_info) => {
+                        ResponseData::Preview(buffer, image_info) => {
                             if let Commands::LoadThumbnail(index) = msg.request.command() {
                                 let state_repr = match image_info.filter_settings.filter {
                                     FilterState::Accepted => 1,

@@ -42,11 +42,7 @@ impl Worker {
         let container = browser.at_index(index as usize);
         let image = container.get_full_preview()?;
 
-        Ok(ResponseData::LoadedPhoto(
-            index,
-            image,
-            container.get_state(),
-        ))
+        Ok(ResponseData::Photo(index, image, container.get_state()))
     }
 
     fn load_raw_photo(&self, index: u32) -> Result<ResponseData, ModelError> {
@@ -58,11 +54,7 @@ impl Worker {
         let container = browser.at_index(index as usize);
         let image = container.get_full_preview()?;
 
-        Ok(ResponseData::LoadedPhoto(
-            index,
-            image,
-            container.get_state(),
-        ))
+        Ok(ResponseData::Photo(index, image, container.get_state()))
     }
 
     fn load_preview(&self, index: u32) -> Result<ResponseData, ModelError> {
@@ -73,7 +65,7 @@ impl Worker {
         let image = container.get_thumbnail()?;
         let state = container.get_state();
 
-        Ok(ResponseData::LoadedPreview(image, state))
+        Ok(ResponseData::Preview(image, state))
     }
 
     fn load_directory(&mut self, path: String) -> Result<ResponseData, ModelError> {
@@ -92,7 +84,7 @@ impl Worker {
             }
         }
 
-        Ok(ResponseData::LoadedDirectory(length as u32))
+        Ok(ResponseData::Directory(length as u32))
     }
 
     fn export_image(&self, index: u32, output_dir_path: PathBuf) -> Result<(), ModelError> {

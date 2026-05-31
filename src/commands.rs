@@ -155,15 +155,15 @@ pub struct Response {
 #[derive(Debug)]
 pub enum ResponseData {
     /// Directory loaded, containing the number of images found.
-    LoadedDirectory(u32),
+    Directory(u32),
     /// Photo loaded with its image data and state.
-    LoadedPhoto(
+    Photo(
         u32,
         SharedPixelBuffer<Rgb8Pixel>,
         crate::model::image_container::ImageContainerState,
     ),
     /// Preview image loaded.
-    LoadedPreview(SharedPixelBuffer<Rgb8Pixel>, ImageContainerState),
+    Preview(SharedPixelBuffer<Rgb8Pixel>, ImageContainerState),
 }
 
 pub enum RenderRequest {

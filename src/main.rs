@@ -9,8 +9,9 @@ mod response_listener;
 mod view_model;
 
 use crossbeam::channel::unbounded;
-use std::{env::args, error::Error, fmt::Debug, thread};
-use tracing::info;
+use std::{env::args, error::Error, thread};
+use tracing::{Level, info};
+use tracing_subscriber::fmt::writer::MakeWriterExt;
 
 use crate::{
     commands::{Commands, Response},
@@ -28,8 +29,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Setup logging
     let file_appender = tracing_appender::rolling::daily("logs", "app.log");
     let (non_blocking, _) = tracing_appender::non_blocking(file_appender);
+    let combined_writer = std::io::stdout.and(non_blocking);
 
-    tracing_subscriber::fmt().with_writer(non_blocking).init();
+    tracing_subscriber::fmt()
+        .with_writer(combined_writer)
+        .with_max_level(Level::DEBUG)
+        .init();
 
     info!("Application starting...");
 
