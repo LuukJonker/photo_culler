@@ -1,5 +1,6 @@
 use slint::{Model, Weak};
-use tracing::info;
+use tracing::field::debug;
+use tracing::{Level, debug, debug_span, info, span};
 
 use crate::commands::{Commands, Request};
 use crate::model::image_container::{FilterState, ImageContainerState, ImageSettings};
@@ -224,6 +225,8 @@ impl ViewModel {
         // Select photo callback
         let go_to = go_to_photo.clone();
         self.ui.on_select_photo(move |index| {
+            debug!("on_select_photo(index={})", index);
+
             go_to(index as usize);
         });
 
@@ -232,6 +235,8 @@ impl ViewModel {
         let appstate = self.appstate.clone();
 
         self.ui.on_load_raw(move || {
+            debug!("on_load_raw()");
+
             let state = appstate.lock().unwrap();
 
             // Update the selected photo id by adding 1
@@ -246,7 +251,7 @@ impl ViewModel {
         let appstate = self.appstate.clone();
 
         self.ui.on_settings_changed(move |brightness, contrast| {
-            info!(
+            debug!(
                 "on_settings_changed brightness: {} contrast: {}",
                 brightness, contrast
             );
@@ -272,8 +277,11 @@ impl ViewModel {
         let weak = self.ui.as_weak();
 
         self.ui.on_accept_photo(move || {
+            span!(Level::DEBUG, "on_accept_photo");
+
             let mut state = appstate.lock().unwrap();
             if let Some(selected_photo_id) = state.current_photo_id {
+                debug!(photo_id = selected_photo_id);
                 state.set_image_filter(selected_photo_id as usize, FilterState::Accepted);
 
                 weak.upgrade_in_event_loop(move |handle| {
@@ -297,9 +305,12 @@ impl ViewModel {
         let weak = self.ui.as_weak();
 
         self.ui.on_reject_photo(move || {
+            debug_span!("on_reject_photo");
+
             // BUG: Crashes when this filter settings change means photo is out of the view
             let mut state = appstate.lock().unwrap();
             if let Some(selected_photo_id) = state.current_photo_id {
+                debug!(photo_id = selected_photo_id);
                 state.set_image_filter(selected_photo_id as usize, FilterState::Rejected);
 
                 weak.upgrade_in_event_loop(move |handle| {
@@ -385,6 +396,13 @@ impl ViewModel {
                 .unwrap();
             }
         });
+
+        let sender = self.sender.clone();
+        self.ui.on_browse_photos_dir(move || {
+            if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                sender.send(Commands::LoadDirectory(folder).high()).unwrap();
+            }
+        })
     }
 
     pub fn get_ui_handle(&self) -> Weak<AppWindow> {
@@ -397,6 +415,7 @@ impl ViewModel {
 
     pub fn send_model_save(&self) {
         self.sender.send(Commands::SaveState.critical()).unwrap();
+        self.sender.send(Commands::KillThread.high()).unwrap();
     }
 
     pub fn run(&self) -> Result<(), slint::PlatformError> {

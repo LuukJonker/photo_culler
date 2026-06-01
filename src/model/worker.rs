@@ -2,6 +2,7 @@ use crossbeam::channel::{Receiver, Sender};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
+use tracing::debug;
 
 use crate::commands::{Commands, Request, Response, ResponseData};
 use crate::error::ModelError;
@@ -68,21 +69,14 @@ impl Worker {
         Ok(ResponseData::Preview(image, state))
     }
 
-    fn load_directory(&mut self, path: String) -> Result<ResponseData, ModelError> {
+    fn load_directory(&mut self, path: PathBuf) -> Result<ResponseData, ModelError> {
         // Don't check if the current browser is the same as we are trying to load.
         // User might want to reload the browser.
-        let browser = ImageBrowser::new(path.into())?;
+        let browser = ImageBrowser::new(path)?;
         let length = browser.len();
 
         // Store the browser, even if there is a
-        match self.browser.write() {
-            Ok(mut lock) => *lock = Some(browser),
-            Err(mut lock_e) => {
-                dbg!("Lock was poisened");
-                **lock_e.get_mut() = Some(browser);
-                self.browser.clear_poison();
-            }
-        }
+        *self.browser.write().unwrap() = Some(browser);
 
         Ok(ResponseData::Directory(length as u32))
     }
@@ -155,11 +149,11 @@ impl Worker {
 
             Commands::SaveState => {
                 let browser = self.browser.read().unwrap();
-                browser.as_ref().unwrap().save_to_disk();
+                browser.as_ref().unwrap().save_to_disk().unwrap();
 
                 // Do nothing after saving state, previously exited here, but didn't seem like a
                 // good plan.
-                return ResponseAction::Nothing;
+                ResponseAction::Nothing
             }
 
             Commands::KillThread => {
@@ -174,6 +168,8 @@ impl Worker {
         let receiver = self.receiver.clone();
         for msg in receiver {
             let cmd = msg.command();
+
+            debug!("Worker got command: {:?}", cmd);
 
             let return_value = self.handle_request(cmd);
 
@@ -190,12 +186,18 @@ impl Worker {
                 ResponseAction::Nothing => continue,
 
                 // Close the thread
-                ResponseAction::Exit => return,
+                ResponseAction::Exit => {
+                    tracing::info!("Stopping worker thread");
+                    return;
+                }
             }
         }
     }
 
-    pub fn run(self) -> JoinHandle<()> {
-        thread::spawn(move || self.event_loop())
+    pub fn run(self, id: i32) -> JoinHandle<()> {
+        thread::Builder::new()
+            .name(format!("worker_{}", id))
+            .spawn(move || self.event_loop())
+            .unwrap()
     }
 }

@@ -1,7 +1,8 @@
-use std::fmt::Formatter;
+use core::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, atomic::AtomicBool};
+use tracing::debug;
 
 use crate::error::ModelError;
 use crate::model::image_container::{
@@ -20,7 +21,7 @@ fn get_id() -> usize {
 }
 
 /// A request to be processed by the model's worker threads.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Request {
     /// Unique identifier for the request.
     id: usize,
@@ -53,6 +54,8 @@ impl Request {
 
     /// Signals that the request should be cancelled.
     pub fn cancel(&mut self) {
+        debug!("Request {} cancelled", self.id);
+
         self.cancelation_token.store(true, Ordering::Relaxed);
     }
 
@@ -70,7 +73,7 @@ impl From<Commands> for Request {
 }
 
 /// Priority levels for job scheduling.
-#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub enum Priority {
     /// Background tasks.
     Low,
@@ -85,12 +88,16 @@ pub enum Priority {
 impl Commands {
     /// Internal helper to wrap a command in a Request with a given priority.
     fn make(self, priority: Priority) -> Request {
-        Request {
+        let req = Request {
             id: get_id(),
             command: self,
             priority,
             cancelation_token: Arc::new(AtomicBool::new(false)),
-        }
+        };
+
+        debug!("Creating {:?}", req);
+
+        req
     }
 
     /// Wraps the command in a Request with Medium priority.
@@ -115,14 +122,14 @@ impl Commands {
 }
 
 /// Commands that can be sent to the model for execution.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Commands {
     /// Load a photo at the specified index.
     LoadPhoto(u32),
     /// Load the RAW data for the photo at the specified index.
     LoadRawPhoto(u32),
     /// Load a directory from the given path string.
-    LoadDirectory(String),
+    LoadDirectory(PathBuf),
     /// Load a thumbnail for the photo at the specified index.
     LoadThumbnail(u32),
 
@@ -152,7 +159,6 @@ pub struct Response {
 }
 
 /// Data payload of a successful response.
-#[derive(Debug)]
 pub enum ResponseData {
     /// Directory loaded, containing the number of images found.
     Directory(u32),

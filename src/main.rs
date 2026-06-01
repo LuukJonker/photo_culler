@@ -34,6 +34,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
         .with_writer(combined_writer)
         .with_max_level(Level::DEBUG)
+        .with_thread_names(true)
+        .with_thread_ids(true)
         .init();
 
     info!("Application starting...");
@@ -51,14 +53,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         vm.get_appstate(),
     );
 
-    model.get_sender().send(
-        Commands::LoadDirectory(
-            args()
-                .nth(1)
-                .ok_or_else(|| "No directory specified".to_string())?,
-        )
-        .request(),
-    )?;
+    if let Some(folder_path) = args().nth(1) {
+        model
+            .get_sender()
+            .send(Commands::LoadDirectory(folder_path.into()).request())?;
+    }
 
     // Start the threads
     let worker_handles = model.run(response_sender);
@@ -71,13 +70,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     // stopped and the model is killed.
     vm.send_model_save();
 
-    // Block until the model is done
-    // for handle in worker_handles {
-    //     handle.join().unwrap();
-    // }
-    //
-    // For now just a simple timer
-    thread::sleep_ms(2000);
+    //Block until the model is done
+    for handle in worker_handles {
+        handle.join().unwrap();
+    }
+
+    //For now just a simple timer
+    //    thread::sleep_ms(2000);
 
     Ok(())
 }

@@ -46,6 +46,7 @@ export component AppWindow inherits Window {
     callback set_view_filter(int);
     callback start_export(string);
     callback browse_export_dir();
+    callback browse_photos_dir();
 
     // Navigation and Scrolling logic
     function navigate_right() {
@@ -76,6 +77,9 @@ export component AppWindow inherits Window {
                 if (event.text == Key.LeftArrow || event.text == "j") {
                     root.navigate_left();
                     return accept;
+                }
+                if (event.text == "0") {
+                    root.select_photo(0);
                 }
 
               // Set filters (only in single mode)
@@ -186,6 +190,9 @@ export component AppWindow inherits Window {
                 }
                 load-raw => {
                     root.load_raw();
+                }
+                open-folder-clicked => {
+                    root.browse_photos_dir();
                 }
             }
         }

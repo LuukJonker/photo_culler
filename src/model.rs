@@ -3,6 +3,7 @@ pub mod image_browser;
 pub mod image_container;
 mod render_worker;
 mod worker;
+use tracing::{error, info, warn};
 
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
@@ -142,7 +143,10 @@ impl Model {
                 i if i == incoming_oper => {
                     match oper.recv(&self.incoming_receiver) {
                         Ok(job) => self.queue.push(RequestWithPriority::new(job)),
-                        Err(_) => break, // The incoming sender was dropped, safely exit thread
+                        Err(_) => {
+                            error!("Incoming sender was dropped, exiting thread safely");
+                            break;
+                        } // The incoming sender was dropped, safely exit thread
                     }
                 }
                 // A worker is ready to receive a job
@@ -151,10 +155,7 @@ impl Model {
                     let job = self.queue.pop().unwrap();
 
                     if let Commands::KillThread = job.request.command() {
-                        // Kill this thread
-                        if job.request.priority() == Priority::Low {
-                            return;
-                        }
+                        info!("Killing all worker threads");
 
                         for _ in 0..11 {
                             self.queue.push(RequestWithPriority {
@@ -171,6 +172,7 @@ impl Model {
                         // The worker disconnected right as we tried to send!
                         // In a robust system, we put the job back in the queue.
                         self.queue.push(job);
+                        warn!("Worker disconnected during send, restoring job to the queue");
                     }
                 }
                 _ => unreachable!(),
@@ -183,15 +185,19 @@ impl Model {
         let mut worker_handles = Vec::new();
 
         // Start the worker threads and at only the handles to the
-        for _ in 0..10 {
-            worker_handles
-                .push(Worker::new(self.get_receiver(), response_sender.clone(), &self.state).run());
+        for i in 0..10 {
+            worker_handles.push(
+                Worker::new(self.get_receiver(), response_sender.clone(), &self.state).run(i),
+            );
         }
 
         // worker_handles.push(RenderThread::new(self.render_sender.clone(), self.render_receiver.clone()).run());
 
         // Run the manager part of the model
-        thread::spawn(move || self.inner());
+        thread::Builder::new()
+            .name("model_thread".into())
+            .spawn(move || self.inner())
+            .unwrap();
 
         worker_handles
     }

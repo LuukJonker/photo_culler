@@ -7,11 +7,12 @@ export component Sidebar inherits Rectangle {
     in property <int> view-mode; // 0: Single, 1: Grid
     in-out property <float> brightness-val;
     in-out property <float> contrast-val;
-    
+
     callback settings-changed(float, float);
     callback load-raw();
     callback toggle-view-mode();
     callback export-clicked();
+    callback open-folder-clicked();
 
     width: 280px;
     background: Theme.sidebar;
@@ -33,13 +34,20 @@ export component Sidebar inherits Rectangle {
                     font-size: 20px;
                     letter-spacing: 1px;
                 }
-                Rectangle { horizontal-stretch: 1; }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
                 Button {
                     text: root.view-mode == 0 ? "Grid" : "Single";
-                    clicked => { root.toggle-view-mode(); }
+                    clicked => {
+                        root.toggle-view-mode();
+                    }
                     height: 24px;
                 }
             }
+
             Text {
                 text: (root.photo-count > 0 ? root.selected-index + 1 : 0) + " / " + root.photo-count;
                 color: Theme.text-dim;
@@ -47,23 +55,31 @@ export component Sidebar inherits Rectangle {
             }
         }
 
-        Rectangle { height: 1px; background: #333; }
+        Rectangle {
+            height: 1px;
+            background: #333;
+        }
 
-        if (root.view-mode == 0) : GroupBox {
+        if (root.view-mode == 0): GroupBox {
             title: "DEVELOP";
             VerticalLayout {
                 spacing: 15px;
-                
+
                 VerticalLayout {
                     spacing: 4px;
                     HorizontalLayout {
-                        Text { text: "Brightness"; color: Theme.text; }
-                        Text { 
-                            text: Math.round(root.brightness-val) + ""; 
-                            color: Theme.accent; 
+                        Text {
+                            text: "Brightness";
+                            color: Theme.text;
+                        }
+
+                        Text {
+                            text: Math.round(root.brightness-val) + "";
+                            color: Theme.accent;
                             horizontal-alignment: right;
                         }
                     }
+
                     Slider {
                         value <=> root.brightness-val;
                         minimum: -100;
@@ -77,13 +93,18 @@ export component Sidebar inherits Rectangle {
                 VerticalLayout {
                     spacing: 4px;
                     HorizontalLayout {
-                        Text { text: "Contrast"; color: Theme.text; }
-                        Text { 
-                            text: root.contrast-val; 
+                        Text {
+                            text: "Contrast";
+                            color: Theme.text;
+                        }
+
+                        Text {
+                            text: root.contrast-val;
                             color: Theme.accent;
                             horizontal-alignment: right;
                         }
                     }
+
                     Slider {
                         value <=> root.contrast_val;
                         minimum: 0.5;
@@ -93,20 +114,38 @@ export component Sidebar inherits Rectangle {
                         }
                     }
                 }
-                
+
                 Button {
                     text: "Full RAW Resolution";
-                    clicked => { root.load-raw(); }
+                    clicked => {
+                        root.load-raw();
+                    }
                 }
             }
         }
 
-        if (root.view-mode == 1) : GroupBox {
+        if (root.view-mode == 1): GroupBox {
             title: "GRID INFO";
             VerticalLayout {
                 spacing: 10px;
-                Text { text: "Total Photos: " + root.photo-count; color: Theme.text; }
-                Text { text: "Viewing all thumbnails"; color: Theme.text-dim; font-size: 12px; }
+                Text {
+                    text: "Total Photos: " + root.photo-count;
+                    color: Theme.text;
+                }
+
+                Text {
+                    text: "Viewing all thumbnails";
+                    color: Theme.text-dim;
+                    font-size: 12px;
+                }
+            }
+
+            Button {
+                text: "OPEN FOLDER";
+                height: 25px;
+                clicked => {
+                    root.open-folder-clicked();
+                }
             }
         }
 
@@ -114,22 +153,49 @@ export component Sidebar inherits Rectangle {
             title: "SHORTCUTS";
             VerticalLayout {
                 spacing: 8px;
-                KeyboardHint { key: "V"; label: "Toggle View Mode"; }
-                KeyboardHint { key: "←/→"; label: "Navigate"; }
-                KeyboardHint { key: "A"; label: "Accept Photo"; }
-                KeyboardHint { key: "R"; label: "Reject Photo"; }
-                KeyboardHint { key: "S"; label: "Toggle 'Scherm'"; }
-                KeyboardHint { key: "Q"; label: "Load RAW"; }
+                KeyboardHint {
+                    key: "V";
+                    label: "Toggle View Mode";
+                }
+
+                KeyboardHint {
+                    key: "←/→";
+                    label: "Navigate";
+                }
+
+                KeyboardHint {
+                    key: "A";
+                    label: "Accept Photo";
+                }
+
+                KeyboardHint {
+                    key: "R";
+                    label: "Reject Photo";
+                }
+
+                KeyboardHint {
+                    key: "S";
+                    label: "Toggle 'Scherm'";
+                }
+
+                KeyboardHint {
+                    key: "Q";
+                    label: "Load RAW";
+                }
             }
         }
 
-        Rectangle { vertical-stretch: 1; } // Spacer
+        Rectangle {
+            vertical-stretch: 1;
+        } // Spacer
 
-        if (root.view-mode == 1) : Button {
+        if (root.view-mode == 1): Button {
             text: "EXPORT SELECTION";
             primary: true;
             height: 45px;
-            clicked => { root.export-clicked(); }
+            clicked => {
+                root.export-clicked();
+            }
         }
     }
 }

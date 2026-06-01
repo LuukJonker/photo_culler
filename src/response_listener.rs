@@ -1,4 +1,6 @@
 use slint::{Image, Model, ModelRc, VecModel, Weak};
+use tracing::{error, info, warn};
+use tracing_unwrap::{OptionExt, ResultExt};
 
 use crate::{
     commands::{Commands, Request, Response, ResponseData},
@@ -38,110 +40,128 @@ impl ResponseListener {
         }
     }
 
-    pub fn start(self) {
-        thread::spawn(move || {
-            for msg in self.receiver.iter() {
-                let value = msg.value;
+    fn listen(self) {
+        for msg in self.receiver.iter() {
+            let value = msg.value;
 
-                if let Ok(data) = value {
-                    match data {
-                        ResponseData::Photo(id, buffer, state) => {
-                            // If not good photo, dont show
-                            if Some(id) != self.appstate.lock().unwrap().current_photo_id {
-                                continue;
-                            }
-
-                            let filename = state
-                                .path
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string();
-
-                            self.ui_handle
-                                .upgrade_in_event_loop(move |handle| {
-                                    handle.set_brightness_val(state.image_settings.brightness);
-                                    handle.set_contrast_val(state.image_settings.contrast);
-                                    handle.set_is_scherm(state.filter_settings.scherm);
-                                    handle.set_selected_photo_filename(filename.into());
-                                    handle.set_current_image(Image::from_rgb8(buffer));
-                                })
-                                .expect("Load photo event loop error");
+            if let Ok(data) = value {
+                match data {
+                    ResponseData::Photo(id, buffer, state) => {
+                        info!("Photo {} in response", id);
+                        // If not good photo, dont show
+                        if Some(id) != self.appstate.lock().unwrap().current_photo_id {
+                            warn!("Received photo isn't the current photo");
+                            continue;
                         }
 
-                        ResponseData::Directory(num_images) => {
-                            // Update the state
-                            let mut state = self.appstate.lock().unwrap();
-                            state.current_photo_id = Some(0);
-                            state.current_view_index = Some(0);
-                            state.num_photos = num_images;
-                            state
-                                .photos_infos
-                                .resize_with(num_images as usize, ImageContainerState::default);
-                            state.view_images_mapping = (0..num_images).collect();
+                        let filename = state
+                            .path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
 
-                            // Initialize the filmstrip with empty placeholder images
-                            self.ui_handle
-                                .upgrade_in_event_loop(move |handle| {
-                                    handle.set_photo_count(num_images as i32);
+                        self.ui_handle
+                            .upgrade_in_event_loop(move |handle| {
+                                handle.set_brightness_val(state.image_settings.brightness);
+                                handle.set_contrast_val(state.image_settings.contrast);
+                                handle.set_is_scherm(state.filter_settings.scherm);
+                                handle.set_selected_photo_filename(filename.into());
+                                handle.set_current_image(Image::from_rgb8(buffer));
+                            })
+                            .expect_or_log("Load photo event loop error");
 
-                                    let empty_images: Vec<Image> =
-                                        vec![Image::default(); num_images as usize];
-                                    let model = std::rc::Rc::new(VecModel::from(empty_images));
-                                    handle.set_filmstrip_images(ModelRc::from(model));
+                        info!("Photo {} success", id);
+                    }
 
-                                    let empty_statuses: Vec<i32> = vec![0; num_images as usize];
-                                    let status_model =
-                                        std::rc::Rc::new(VecModel::from(empty_statuses));
-                                    handle.set_filmstrip_statuses(ModelRc::from(status_model));
+                    ResponseData::Directory(num_images) => {
+                        info!("Directory in response with {} images", num_images);
 
-                                    let initial_visible_indices: Vec<i32> =
-                                        (0..num_images as i32).collect();
-                                    let visible_indices_model =
-                                        std::rc::Rc::new(VecModel::from(initial_visible_indices));
-                                    handle.set_filmstrip_visible_indices(ModelRc::from(
-                                        visible_indices_model,
-                                    ));
-                                })
-                                .expect("Init filmstrip event loop error");
+                        // Update the state
+                        let mut state = self.appstate.lock().unwrap_or_log();
+                        state.current_photo_id = Some(0);
+                        state.current_view_index = Some(0);
+                        state.num_photos = num_images;
+                        state
+                            .photos_infos
+                            .resize_with(num_images as usize, ImageContainerState::default);
+                        state.view_images_mapping = (0..num_images).collect();
 
-                            self.sender.send(Commands::LoadPhoto(0).high()).unwrap();
+                        // Initialize the filmstrip with empty placeholder images
+                        self.ui_handle
+                            .upgrade_in_event_loop(move |handle| {
+                                handle.set_photo_count(num_images as i32);
 
-                            for i in 0..num_images {
-                                self.sender.send(Commands::LoadThumbnail(i).low()).unwrap();
-                            }
-                        }
+                                let empty_images: Vec<Image> =
+                                    vec![Image::default(); num_images as usize];
+                                let model = std::rc::Rc::new(VecModel::from(empty_images));
+                                handle.set_filmstrip_images(ModelRc::from(model));
 
-                        ResponseData::Preview(buffer, image_info) => {
-                            if let Commands::LoadThumbnail(index) = msg.request.command() {
-                                let state_repr = match image_info.filter_settings.filter {
-                                    FilterState::Accepted => 1,
-                                    FilterState::Rejected => 2,
-                                    FilterState::Unknown => 0,
-                                };
+                                let empty_statuses: Vec<i32> = vec![0; num_images as usize];
+                                let status_model = std::rc::Rc::new(VecModel::from(empty_statuses));
+                                handle.set_filmstrip_statuses(ModelRc::from(status_model));
 
-                                let mut state = self.appstate.lock().unwrap();
-                                state.photos_infos[index as usize] = image_info;
+                                let initial_visible_indices: Vec<i32> =
+                                    (0..num_images as i32).collect();
+                                let visible_indices_model =
+                                    std::rc::Rc::new(VecModel::from(initial_visible_indices));
+                                handle.set_filmstrip_visible_indices(ModelRc::from(
+                                    visible_indices_model,
+                                ));
+                            })
+                            .expect_or_log("Init filmstrip event loop error");
 
-                                self.ui_handle
-                                    .upgrade_in_event_loop(move |handle| {
-                                        handle
-                                            .get_filmstrip_images()
-                                            .set_row_data(index as usize, Image::from_rgb8(buffer));
+                        self.sender
+                            .send(Commands::LoadPhoto(0).high())
+                            .unwrap_or_log();
 
-                                        handle
-                                            .get_filmstrip_statuses()
-                                            .set_row_data(index as usize, state_repr);
-                                    })
-                                    .expect("Load preview event loop error");
-                            }
+                        for i in 0..num_images {
+                            self.sender
+                                .send(Commands::LoadThumbnail(i).low())
+                                .unwrap_or_log();
                         }
                     }
-                } else if let Err(e) = value {
-                    // Error occured
-                    println!("MODEL ERROR: {}", e);
+
+                    ResponseData::Preview(buffer, image_info) => {
+                        if let Commands::LoadThumbnail(index) = msg.request.command() {
+                            info!("Tumbnail in response for photo {}", index);
+
+                            let state_repr = match image_info.filter_settings.filter {
+                                FilterState::Accepted => 1,
+                                FilterState::Rejected => 2,
+                                FilterState::Unknown => 0,
+                            };
+
+                            let mut state = self.appstate.lock().unwrap_or_log();
+                            state.photos_infos[index as usize] = image_info;
+
+                            self.ui_handle
+                                .upgrade_in_event_loop(move |handle| {
+                                    handle
+                                        .get_filmstrip_images()
+                                        .set_row_data(index as usize, Image::from_rgb8(buffer));
+
+                                    handle
+                                        .get_filmstrip_statuses()
+                                        .set_row_data(index as usize, state_repr);
+                                })
+                                .expect_or_log("Load preview event loop error");
+                        } else {
+                            error!("Thumbnail response doesn't have a LoadThumbnail Command");
+                        }
+                    }
                 }
+            } else if let Err(e) = value {
+                // Error occured
+                error!("{:?}", e);
             }
-        });
+        }
+    }
+
+    pub fn start(self) {
+        thread::Builder::new()
+            .name("listener_thread".into())
+            .spawn(move || self.listen())
+            .unwrap_or_log();
     }
 }
