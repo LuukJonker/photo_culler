@@ -15,6 +15,7 @@ use tracing_subscriber::fmt::writer::MakeWriterExt;
 
 use crate::{
     commands::{Commands, Response},
+    constants::{APP_AUTHOR, APP_NAME},
     model::Model,
     response_listener::ResponseListener,
     view_model::ViewModel,
@@ -27,16 +28,21 @@ use crate::{
 /// and starts the main application loop.
 fn main() -> Result<(), Box<dyn Error>> {
     // Setup logging
-    let file_appender = tracing_appender::rolling::daily("logs", "app.log");
-    let (non_blocking, _) = tracing_appender::non_blocking(file_appender);
-    let combined_writer = std::io::stdout.and(non_blocking);
+    let logs_dir = appdirs::user_log_dir(Some(APP_NAME), Some(APP_AUTHOR));
+    if let Ok(logs_dir) = logs_dir {
+        let file_appender = tracing_appender::rolling::daily(&logs_dir, "app.log");
+        let (non_blocking, _) = tracing_appender::non_blocking(file_appender);
+        let combined_writer = std::io::stdout.and(non_blocking);
 
-    tracing_subscriber::fmt()
-        .with_writer(combined_writer)
-        .with_max_level(Level::DEBUG)
-        .with_thread_names(true)
-        .with_thread_ids(true)
-        .init();
+        tracing_subscriber::fmt()
+            .with_writer(combined_writer)
+            .with_max_level(Level::DEBUG)
+            .with_thread_names(true)
+            .with_thread_ids(true)
+            .init();
+
+        info!("Writing logs to {:?}", logs_dir);
+    }
 
     info!("Application starting...");
 
