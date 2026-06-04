@@ -10,8 +10,9 @@ mod view_model;
 
 use crossbeam::channel::unbounded;
 use std::{env::args, error::Error, thread};
-use tracing::{Level, info};
+use tracing::{Level, debug, info};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_unwrap::{OptionExt, ResultExt};
 
 use crate::{
     commands::{Commands, Response},
@@ -30,18 +31,36 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Setup logging
     let logs_dir = appdirs::user_log_dir(Some(APP_NAME), Some(APP_AUTHOR));
     if let Ok(logs_dir) = logs_dir {
-        let file_appender = tracing_appender::rolling::daily(&logs_dir, "app.log");
-        let (non_blocking, _) = tracing_appender::non_blocking(file_appender);
-        let combined_writer = std::io::stdout.and(non_blocking);
+        if std::fs::create_dir_all(&logs_dir).is_ok() {
+            let file_appender = tracing_appender::rolling::daily(&logs_dir, "app.log");
+            let (non_blocking, _) = tracing_appender::non_blocking(file_appender);
+            let combined_writer = std::io::stdout.and(non_blocking);
 
+            tracing_subscriber::fmt()
+                .with_writer(combined_writer)
+                .with_max_level(Level::DEBUG)
+                .with_thread_names(true)
+                .with_thread_ids(true)
+                .init();
+
+            info!("Writing logs to {:?}", logs_dir);
+        } else {
+            tracing_subscriber::fmt()
+                .with_max_level(Level::DEBUG)
+                .with_thread_names(true)
+                .with_thread_ids(true)
+                .init();
+            tracing::warn!(
+                "Failed to create log directory at {:?}. Falling back to console logging only.",
+                logs_dir
+            );
+        }
+    } else {
         tracing_subscriber::fmt()
-            .with_writer(combined_writer)
             .with_max_level(Level::DEBUG)
             .with_thread_names(true)
             .with_thread_ids(true)
             .init();
-
-        info!("Writing logs to {:?}", logs_dir);
     }
 
     info!("Application starting...");
@@ -66,8 +85,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Start the threads
-    let worker_handles = model.run(response_sender);
-    listener.start();
+    let mut worker_handles = model.run(response_sender);
+    let listener_handle = listener.start();
 
     // Blocks the main thread, call it last
     vm.run()?;
@@ -77,12 +96,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     vm.send_model_save();
 
     //Block until the model is done
-    for handle in worker_handles {
-        handle.join().unwrap();
+    for i in 0..10 {
+        worker_handles.pop().unwrap_or_log();
+        debug!("Closed handle {}", i);
     }
-
-    //For now just a simple timer
-    //    thread::sleep_ms(2000);
+    listener_handle.join().unwrap_or_log();
 
     Ok(())
 }

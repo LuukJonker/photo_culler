@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use tracing::debug;
+use tracing::warn;
 
 use crate::commands::{Commands, Request, Response, ResponseData};
 use crate::error::ModelError;
@@ -180,7 +181,7 @@ impl Worker {
                         request: msg,
                         value: resp,
                     })
-                    .unwrap(),
+                    .unwrap_or_else(|_| warn!("Response channel closed, can't send response")),
 
                 // We do nothing, so continue to next msg
                 ResponseAction::Nothing => continue,
@@ -188,6 +189,15 @@ impl Worker {
                 // Close the thread
                 ResponseAction::Exit => {
                     tracing::info!("Stopping worker thread");
+
+                    // Send to kill request to response listener
+                    // Doesn't matter how many are send
+                    // Also don't unwrap bc channel can be closed for later workers
+                    let _ = self.response_sender.send(Response {
+                        request: msg,
+                        value: Ok(ResponseData::KillThread),
+                    });
+
                     return;
                 }
             }

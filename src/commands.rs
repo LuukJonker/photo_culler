@@ -170,6 +170,7 @@ pub enum ResponseData {
     ),
     /// Preview image loaded.
     Preview(SharedPixelBuffer<Rgb8Pixel>, ImageContainerState),
+    KillThread,
 }
 
 pub enum RenderRequest {

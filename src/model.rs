@@ -2,6 +2,7 @@ pub mod disk_writer;
 pub mod image_browser;
 pub mod image_container;
 mod render_worker;
+use tracing_unwrap::ResultExt;
 mod worker;
 use tracing::{error, info, warn};
 
@@ -119,6 +120,16 @@ impl Model {
         self.outgoing_receiver.clone()
     }
 
+    fn kill_workers(&self) {
+        info!("Killing workers");
+
+        for _ in 0..10 {
+            self.outgoing_sender
+                .send(Commands::KillThread.high())
+                .unwrap_or_log();
+        }
+    }
+
     /// The internal event loop of the model manager, handling job prioritization.
     fn inner(&mut self) {
         loop {
@@ -155,14 +166,8 @@ impl Model {
                     let job = self.queue.pop().unwrap();
 
                     if let Commands::KillThread = job.request.command() {
-                        info!("Killing all worker threads");
-
-                        for _ in 0..11 {
-                            self.queue.push(RequestWithPriority {
-                                request: Commands::KillThread.critical(),
-                                priority: Priority::Critical,
-                            });
-                        }
+                        self.kill_workers();
+                        return;
                     }
                     // Actually perform the send
                     if oper
@@ -194,10 +199,12 @@ impl Model {
         // worker_handles.push(RenderThread::new(self.render_sender.clone(), self.render_receiver.clone()).run());
 
         // Run the manager part of the model
-        thread::Builder::new()
-            .name("model_thread".into())
-            .spawn(move || self.inner())
-            .unwrap();
+        worker_handles.push(
+            thread::Builder::new()
+                .name("model_thread".into())
+                .spawn(move || self.inner())
+                .unwrap_or_log(),
+        );
 
         worker_handles
     }

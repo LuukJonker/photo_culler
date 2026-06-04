@@ -5,4 +5,5 @@ app_ss.png
 test_out/
 
 logs/
+*.AppImage
 

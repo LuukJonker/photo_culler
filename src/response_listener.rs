@@ -1,4 +1,5 @@
 use slint::{Image, Model, ModelRc, VecModel, Weak};
+use std::thread::JoinHandle;
 use tracing::{error, info, warn};
 use tracing_unwrap::{OptionExt, ResultExt};
 
@@ -41,6 +42,9 @@ impl ResponseListener {
     }
 
     fn listen(self) {
+        // Flag for inner match statement to stop the process
+        let mut kill_thread = false;
+
         for msg in self.receiver.iter() {
             let value = msg.value;
 
@@ -150,6 +154,15 @@ impl ResponseListener {
                             error!("Thumbnail response doesn't have a LoadThumbnail Command");
                         }
                     }
+                    ResponseData::KillThread => {
+                        kill_thread = true;
+                    }
+                }
+
+                if kill_thread {
+                    info!("Kill thread flag was set, killing response listener");
+
+                    return;
                 }
             } else if let Err(e) = value {
                 // Error occured
@@ -158,10 +171,10 @@ impl ResponseListener {
         }
     }
 
-    pub fn start(self) {
+    pub fn start(self) -> JoinHandle<()> {
         thread::Builder::new()
             .name("listener_thread".into())
             .spawn(move || self.listen())
-            .unwrap_or_log();
+            .unwrap_or_log()
     }
 }
