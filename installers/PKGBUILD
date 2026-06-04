@@ -11,7 +11,7 @@ conflicts=()
 replaces=()
 options=(!lto)
 source=("photo_culler_0.1.0_x86_64.tar.gz")
-sha512sums=("c88e30d74cc790f5f5b8bc03fb5d261295b2e50f878e34e4fa32a63858aad480a5b4cb6d8beb5be8e43a0ebf9102afd0e44e99ee4e82007f51eec8a0ace3f7dd")
+sha512sums=("9a642fb6f70f26f1ef57bdbbaa8158971660ac0996807c6c7eeb1551ed9d34e9f4017131d158b2c014a7c83a635fb23f4788d4f493924ad6fc86abe0c7e5c4c4")
 package() {
 	cp -r "${srcdir}"/* "${pkgdir}"/
 }
