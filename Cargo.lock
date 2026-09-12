@@ -3561,6 +3561,7 @@ dependencies = [
  "nalgebra",
  "rfd",
  "rsraw",
+ "rsraw-sys",
  "serde",
  "serde_json",
  "slint",

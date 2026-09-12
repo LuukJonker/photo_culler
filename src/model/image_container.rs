@@ -7,10 +7,12 @@ use std::{
     sync::RwLock,
 };
 
-use crate::error::ModelError;
+use crate::{error::ModelError, model::image_container::image_operations::raw_img_to_jpg};
 use exif::Field;
 use image::DynamicImage;
+use nalgebra::{Matrix3, Vector3};
 use rsraw::{BIT_DEPTH_8, RawImage};
+use rsraw_sys::libraw_data_t;
 use serde::{Deserialize, Serialize};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
@@ -151,20 +153,12 @@ fn load_full_raw_image(path: &Path, use_half_size: bool) -> Result<RawImage, Mod
 }
 
 fn raw_image_to_slint_image(mut raw_img: RawImage) -> SharedPixelBuffer<Rgb8Pixel> {
-    let start_total = std::time::Instant::now();
     let processed = raw_img.process::<BIT_DEPTH_8>().unwrap();
-    println!("raw_img.process took {:?}", start_total.elapsed());
 
-    let start_copy = std::time::Instant::now();
     let mut shared_buf = SharedPixelBuffer::<Rgb8Pixel>::new(processed.width(), processed.height());
     shared_buf
         .make_mut_bytes()
         .copy_from_slice(processed.iter().as_slice());
-    println!("Buffer creation & copy took {:?}", start_copy.elapsed());
-    println!(
-        "raw_image_to_slint_image total took {:?}",
-        start_total.elapsed()
-    );
 
     shared_buf
 }
@@ -192,6 +186,38 @@ fn dynamic_image_to_slint_image(dyn_img: &DynamicImage) -> SharedPixelBuffer<Rgb
 
             pixel_buffer
         }
+    }
+}
+
+fn color_data_from_raw(raw_img: &RawImage) -> (Vector3<f32>, Matrix3<f32>, f32) {
+    unsafe {
+        let raw_struct_ptr = raw_img as *const RawImage as *const *mut libraw_data_t;
+        let ctx = *raw_struct_ptr;
+
+        let color_data = (*ctx).color;
+
+        let cam_mul = color_data.pre_mul;
+        let wb = Vector3::new(cam_mul[0], cam_mul[1], cam_mul[2]);
+
+        let cmatrix = color_data.ccm;
+        let ccm = Matrix3::new(
+            cmatrix[0][0],
+            cmatrix[0][1],
+            cmatrix[0][2],
+            cmatrix[1][0],
+            cmatrix[1][1],
+            cmatrix[1][2],
+            cmatrix[2][0],
+            cmatrix[2][1],
+            cmatrix[2][2],
+        );
+
+        let mut base_ev = color_data.canon_ev;
+        if base_ev < -10.0 {
+            base_ev = 0.0;
+        }
+
+        (wb, ccm, base_ev)
     }
 }
 
@@ -255,9 +281,11 @@ impl ImageContainer {
 
     /// Loads and processes the full RAW image data.
     pub fn get_raw_image(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
-        Ok(raw_image_to_slint_image(load_full_raw_image(
-            &self.path, false,
-        )?))
+        let mut raw_img = load_full_raw_image(&self.path, false)?;
+        let (wb, ccm, base_ev) = color_data_from_raw(&raw_img);
+        Ok(dynamic_image_to_slint_image(&DynamicImage::ImageRgb8(
+            raw_img_to_jpg(&mut raw_img, wb, ccm, base_ev).unwrap(),
+        )))
     }
 
     /// Generates a small thumbnail of the image.
@@ -276,13 +304,19 @@ impl ImageContainer {
 
     /// Exports the image as a JPEG to the specified directory.
     pub fn export(&self, path: &Path) -> Result<(), ModelError> {
-        let image = load_compressed_image(&self.path)?;
+        let mut raw_image = load_full_raw_image(&self.path, false)?;
+
+        let (wb, ccm, base_ev) = color_data_from_raw(&raw_image);
+
+        println!("{:?}, {:?}, {}", wb, ccm, base_ev);
+
+        let jpg_image = image_operations::raw_img_to_jpg(&mut raw_image, wb, ccm, base_ev)?;
         let mut file_path = path.join(self.path.file_stem().ok_or(ModelError::WithMessage(
             "Image path didn't have filename".into(),
         ))?);
         file_path.set_extension("jpg");
 
-        image.save_with_format(file_path, image::ImageFormat::Jpeg)?;
+        jpg_image.save_with_format(file_path, image::ImageFormat::Jpeg)?;
 
         Ok(())
     }

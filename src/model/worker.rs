@@ -54,7 +54,7 @@ impl Worker {
 
         // Get a container
         let container = browser.at_index(index as usize);
-        let image = container.get_full_preview()?;
+        let image = container.get_raw_image()?;
 
         Ok(ResponseData::Photo(index, image, container.get_state()))
     }
@@ -83,10 +83,10 @@ impl Worker {
     }
 
     fn export_image(&self, index: u32, output_dir_path: PathBuf) -> Result<(), ModelError> {
-        let browser_lock = self.browser.read().unwrap();
-        let browser = browser_lock.as_ref().unwrap();
+        let mut browser_lock = self.browser.write().unwrap();
+        let browser = browser_lock.as_mut().unwrap();
 
-        let container = browser.at_index(index as usize);
+        let container = browser.mut_at_index(index as usize);
         container.export(&output_dir_path)?;
 
         Ok(())
