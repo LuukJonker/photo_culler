@@ -1,20 +1,13 @@
 // Prevent console window in addition to Slint window in Windows release builds when, e.g., starting the app via file manager. Ignored on other platforms.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod commands;
-mod constants;
-mod error;
-mod model;
-mod response_listener;
-mod view_model;
-
 use crossbeam::channel::unbounded;
-use std::{env::args, error::Error, thread};
+use std::{env::args, error::Error};
 use tracing::{Level, debug, info};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_unwrap::{OptionExt, ResultExt};
 
-use crate::{
+use photo_culler::{
     commands::{Commands, Response},
     constants::{APP_AUTHOR, APP_NAME},
     model::Model,

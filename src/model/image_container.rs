@@ -16,8 +16,8 @@ use rsraw_sys::libraw_data_t;
 use serde::{Deserialize, Serialize};
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
-mod image_operations;
-mod jpgfromraw;
+pub mod image_operations;
+pub mod jpgfromraw;
 
 /// Settings for image adjustment.
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
@@ -134,7 +134,7 @@ fn load_compressed_image(path: &Path) -> Result<image::DynamicImage, ModelError>
     Ok(img)
 }
 
-fn load_full_raw_image(path: &Path, use_half_size: bool) -> Result<RawImage, ModelError> {
+pub fn load_full_raw_image(path: &Path, use_half_size: bool) -> Result<RawImage, ModelError> {
     let raw_bytes = fs::read(path)?;
 
     let mut raw_image = match RawImage::open(&raw_bytes) {
@@ -189,7 +189,7 @@ fn dynamic_image_to_slint_image(dyn_img: &DynamicImage) -> SharedPixelBuffer<Rgb
     }
 }
 
-fn color_data_from_raw(raw_img: &RawImage) -> (Vector3<f32>, Matrix3<f32>, f32) {
+pub fn color_data_from_raw(raw_img: &RawImage) -> (Vector3<f32>, Matrix3<f32>, f32) {
     unsafe {
         let raw_struct_ptr = raw_img as *const RawImage as *const *mut libraw_data_t;
         let ctx = *raw_struct_ptr;
@@ -200,17 +200,28 @@ fn color_data_from_raw(raw_img: &RawImage) -> (Vector3<f32>, Matrix3<f32>, f32) 
         let wb = Vector3::new(cam_mul[0], cam_mul[1], cam_mul[2]);
 
         let cmatrix = color_data.ccm;
-        let ccm = Matrix3::new(
-            cmatrix[0][0],
-            cmatrix[0][1],
-            cmatrix[0][2],
-            cmatrix[1][0],
-            cmatrix[1][1],
-            cmatrix[1][2],
-            cmatrix[2][0],
-            cmatrix[2][1],
-            cmatrix[2][2],
-        );
+
+        // Libraw only sets the CCM from embedded metadata for some cameras
+        // (e.g. Sony, Olympus, Samsung). For others (e.g. Canon) it stays all
+        // zeros, in which case libraw's own processing already applies the
+        // color correction. Fall back to the identity matrix so the pixels
+        // don't get zeroed out by the multiplication.
+        let ccm_is_zero = (0..3).all(|r| (0..3).all(|c| cmatrix[r][c] == 0.0));
+        let ccm = if ccm_is_zero {
+            Matrix3::identity()
+        } else {
+            Matrix3::new(
+                cmatrix[0][0],
+                cmatrix[0][1],
+                cmatrix[0][2],
+                cmatrix[1][0],
+                cmatrix[1][1],
+                cmatrix[1][2],
+                cmatrix[2][0],
+                cmatrix[2][1],
+                cmatrix[2][2],
+            )
+        };
 
         let mut base_ev = color_data.canon_ev;
         if base_ev < -10.0 {
