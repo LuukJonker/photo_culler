@@ -1,12 +1,13 @@
-import { Button, LineEdit, GroupBox } from "std-widgets.slint";
+import { Button, LineEdit, GroupBox, SpinBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 export component ExportPopup inherits Rectangle {
     callback close();
-    callback export(string);
+    callback export(string, int);
     callback browse();
-    
+
     in-out property <string> output-directory: "";
+    in-out property <int> quality: 80;
 
     background: #000000aa; // Semi-transparent overlay
     
@@ -16,14 +17,14 @@ export component ExportPopup inherits Rectangle {
 
     Rectangle {
         width: 500px;
-        height: 300px;
+        height: 400px;
         background: Theme.sidebar;
         border-radius: 8px;
         border-width: 1px;
         border-color: #444;
-        
+
         // Prevent clicks inside from closing the popup
-        TouchArea {}
+        TouchArea { }
 
         VerticalLayout {
             padding: 30px;
@@ -46,6 +47,7 @@ export component ExportPopup inherits Rectangle {
                         text: "Output Directory:";
                         color: Theme.text;
                     }
+
                     HorizontalLayout {
                         spacing: 10px;
                         LineEdit {
@@ -53,6 +55,7 @@ export component ExportPopup inherits Rectangle {
                             placeholder-text: "Path to export directory...";
                             horizontal-stretch: 1;
                         }
+
                         Button {
                             text: "Browse...";
                             clicked => { root.browse(); }
@@ -61,23 +64,44 @@ export component ExportPopup inherits Rectangle {
                 }
             }
 
-            Rectangle { vertical-stretch: 1; }
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+
+                Text {
+                    text: "Quality";
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+
+                // Should only be a number in the jpg quality range 1-100
+                SpinBox {
+                    value <=> root.quality;
+                    minimum: 1;
+                    maximum: 100;
+                    step-size: 5;
+                }
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+            }
 
             HorizontalLayout {
                 spacing: 20px;
                 alignment: center;
-                
+
                 Button {
                     text: "Cancel";
                     clicked => { root.close(); }
                     width: 100px;
                 }
-                
+
                 Button {
                     text: "Export";
                     primary: true;
                     enabled: root.output-directory != "";
-                    clicked => { root.export(root.output-directory); }
+                    clicked => { root.export(root.output-directory, root.quality); }
                     width: 150px;
                 }
             }

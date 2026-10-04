@@ -30,7 +30,7 @@ fn find_largest_embedded_jpeg_impl<B: ByteOrder>(
     file.read_exact(&mut offset_buf)?;
 
     // Decode from the buffer
-    let mut next_ifd_offset = B::read_u32(&offset_buf).try_into()?;
+    let mut next_ifd_offset = B::read_u32(&offset_buf);
     let mut largest_jpeg = EmbeddedJpegInfo::default();
 
     // Allocate the entries buf here and resize in loop to only request new memory if the buf needs to be larger
@@ -38,7 +38,7 @@ fn find_largest_embedded_jpeg_impl<B: ByteOrder>(
     while next_ifd_offset != 0 {
         // Get the number of entries from the
         let mut num_entries_buf = [0; 2];
-        file.seek(SeekFrom::Start(next_ifd_offset))?;
+        file.seek(SeekFrom::Start(next_ifd_offset as u64))?;
         if file.read_exact(&mut num_entries_buf).is_err() {
             // We break if the file ended and we can't read no more
             break;
@@ -69,17 +69,17 @@ fn find_largest_embedded_jpeg_impl<B: ByteOrder>(
             }
         }
 
-        if let (Some(offset), Some(length)) = (cur_offset, cur_length) {
-            if length > largest_jpeg.length {
-                largest_jpeg = EmbeddedJpegInfo {
-                    offset,
-                    length,
-                    orientation: cur_orientation,
-                };
-            }
+        if let (Some(offset), Some(length)) = (cur_offset, cur_length)
+            && length > largest_jpeg.length
+        {
+            largest_jpeg = EmbeddedJpegInfo {
+                offset,
+                length,
+                orientation: cur_orientation,
+            };
         }
 
-        next_ifd_offset = B::read_u32(&entries_buf[2 + entries_len..][..4]).try_into()?;
+        next_ifd_offset = B::read_u32(&entries_buf[2 + entries_len..][..4]);
     }
 
     // Check if there was actually a jpeg found, otherwise return error

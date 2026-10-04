@@ -15,12 +15,7 @@ use photo_culler::{
     view_model::ViewModel,
 };
 
-/// The main entry point of the Photo Culler application.
-///
-/// It initializes the model, view model, and response listener,
-/// processes command line arguments for the initial directory,
-/// and starts the main application loop.
-fn main() -> Result<(), Box<dyn Error>> {
+fn setup_logging() {
     // Setup logging
     let logs_dir = appdirs::user_log_dir(Some(APP_NAME), Some(APP_AUTHOR));
     if let Ok(logs_dir) = logs_dir {
@@ -55,6 +50,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             .with_thread_ids(true)
             .init();
     }
+}
+
+/// The main entry point of the Photo Culler application.
+///
+/// It initializes the model, view model, and response listener,
+/// processes command line arguments for the initial directory,
+/// and starts the main application loop.
+fn main() -> Result<(), Box<dyn Error>> {
+    setup_logging();
 
     info!("Application starting...");
 

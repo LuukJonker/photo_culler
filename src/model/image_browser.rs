@@ -1,4 +1,5 @@
 use crate::error::ModelError;
+use crate::model::Model;
 use crate::model::disk_writer::{read_contents, write_contents};
 use crate::model::image_container::{ImageContainer, ImageContainerState, ImageSettings};
 use mimetype_detector::{MimeType, TEXT_HTML, detect_file};
@@ -73,6 +74,10 @@ impl ImageBrowser {
         self.images.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.images.is_empty()
+    }
+
     /// Returns a reference to the image container at the specified index.
     pub fn at_index(&self, index: usize) -> &ImageContainer {
         &self.images[index]
@@ -95,8 +100,6 @@ impl ImageBrowser {
             images_states,
         };
 
-        write_contents(&self.root_folder, template).unwrap();
-
-        Ok(())
+        write_contents(&self.root_folder, template).map_err(|_| ModelError::StateDiskStore)
     }
 }

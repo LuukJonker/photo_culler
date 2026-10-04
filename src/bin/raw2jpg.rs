@@ -140,13 +140,13 @@ fn main() -> ExitCode {
         };
 
         let (wb, ccm, base_ev) = color_data_from_raw(&raw_image);
-        println!("White balance: {:?}", wb);
+        println!("White balance (pre_mul): {:?}", wb);
         println!("CCM:\n{ccm}");
         println!("Baseline EV: {base_ev}");
 
         println!("Processing with raw_img_to_jpg...");
         let started = std::time::Instant::now();
-        jpg_image = match raw_img_to_jpg(&mut raw_image, wb, ccm, base_ev) {
+        jpg_image = match raw_img_to_jpg(&mut raw_image) {
             Ok(img) => img,
             Err(e) => {
                 eprintln!("error: raw_img_to_jpg failed: {e}");

@@ -1,4 +1,7 @@
-use crate::{constants::{APP_AUTHOR, APP_NAME}, error::ModelError};
+use crate::{
+    constants::{APP_AUTHOR, APP_NAME},
+    error::ModelError,
+};
 use appdirs::user_data_dir;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -42,7 +45,7 @@ impl MasterFileTemplate {
     /// The bool in the tuple returns if the collection was already present
     fn get_or_add_collection(&mut self, path: &Path) -> (MasterFileIndex, bool) {
         match self.files.get(path) {
-            Some(val) => return (val.clone(), true),
+            Some(val) => (val.clone(), true),
             None => {
                 let id = self._get_id();
                 let index = MasterFileIndex {
@@ -50,7 +53,7 @@ impl MasterFileTemplate {
                     relative_path: format!("collection_{}.json", id),
                 };
                 self.files.insert(path.to_path_buf(), index.clone());
-                return (index, false);
+                (index, false)
             }
         }
     }
@@ -120,4 +123,3 @@ where
     let file = File::open(file_path)?;
     Ok(serde_json::from_reader::<File, T>(file)?)
 }
-

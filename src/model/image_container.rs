@@ -9,7 +9,7 @@ use std::{
 
 use crate::{error::ModelError, model::image_container::image_operations::raw_img_to_jpg};
 use exif::Field;
-use image::DynamicImage;
+use image::{DynamicImage, codecs::jpeg::JpegEncoder};
 use nalgebra::{Matrix3, Vector3};
 use rsraw::{BIT_DEPTH_8, RawImage};
 use rsraw_sys::libraw_data_t;
@@ -293,9 +293,8 @@ impl ImageContainer {
     /// Loads and processes the full RAW image data.
     pub fn get_raw_image(&self) -> Result<SharedPixelBuffer<Rgb8Pixel>, ModelError> {
         let mut raw_img = load_full_raw_image(&self.path, false)?;
-        let (wb, ccm, base_ev) = color_data_from_raw(&raw_img);
         Ok(dynamic_image_to_slint_image(&DynamicImage::ImageRgb8(
-            raw_img_to_jpg(&mut raw_img, wb, ccm, base_ev).unwrap(),
+            raw_img_to_jpg(&mut raw_img)?,
         )))
     }
 
@@ -314,20 +313,24 @@ impl ImageContainer {
     }
 
     /// Exports the image as a JPEG to the specified directory.
-    pub fn export(&self, path: &Path) -> Result<(), ModelError> {
+    pub fn export(&self, path: &Path, quality: u8) -> Result<(), ModelError> {
         let mut raw_image = load_full_raw_image(&self.path, false)?;
 
-        let (wb, ccm, base_ev) = color_data_from_raw(&raw_image);
-
-        println!("{:?}, {:?}, {}", wb, ccm, base_ev);
-
-        let jpg_image = image_operations::raw_img_to_jpg(&mut raw_image, wb, ccm, base_ev)?;
+        let jpg_image = image_operations::raw_img_to_jpg(&mut raw_image)?;
         let mut file_path = path.join(self.path.file_stem().ok_or(ModelError::WithMessage(
             "Image path didn't have filename".into(),
         ))?);
         file_path.set_extension("jpg");
 
-        jpg_image.save_with_format(file_path, image::ImageFormat::Jpeg)?;
+        let file = fs::File::create(file_path)?;
+
+        let mut encoder = JpegEncoder::new_with_quality(file, quality);
+        encoder.encode(
+            jpg_image.as_raw(),
+            jpg_image.width(),
+            jpg_image.height(),
+            image::ExtendedColorType::Rgb8,
+        )?;
 
         Ok(())
     }

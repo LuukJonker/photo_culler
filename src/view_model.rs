@@ -1,6 +1,8 @@
 use slint::{Model, Weak};
 use tracing::field::debug;
 use tracing::{Level, debug, debug_span, info, span};
+use tracing_unwrap::OptionExt;
+use tracing_unwrap::ResultExt;
 
 use crate::commands::{Commands, Request};
 use crate::model::image_container::{FilterState, ImageContainerState, ImageSettings};
@@ -84,12 +86,10 @@ impl AppState {
         }
 
         // Update id
-        self.current_photo_id = Some(
-            *self
-                .view_images_mapping
-                .get(self.current_view_index.unwrap())
-                .unwrap(),
-        );
+        self.current_photo_id = self
+            .view_images_mapping
+            .get(self.current_view_index.unwrap())
+            .copied();
 
         self.filter = filter;
 
@@ -356,11 +356,14 @@ impl ViewModel {
                 }
             };
 
-            let mut state = state.lock().unwrap();
+            let mut state = state.lock().unwrap_or_log();
 
             // Need to update the select photo id after using this function
             let view_images_indices = state.set_filter(filter);
-            let current_id = state.current_photo_id.unwrap();
+            let current_id = match state.current_photo_id {
+                Some(val) => val as i32,
+                None => -1,
+            };
 
             weak.upgrade_in_event_loop(move |handle| {
                 let visible_indices_model = std::rc::Rc::new(slint::VecModel::from_iter(
@@ -369,18 +372,21 @@ impl ViewModel {
 
                 handle.set_filmstrip_visible_indices(slint::ModelRc::from(visible_indices_model));
 
-                handle.set_selected_index(current_id as i32);
+                handle.set_selected_index(current_id);
             })
             .unwrap();
         });
 
         let state = self.appstate.clone();
         let sender = self.sender.clone();
-        self.ui.on_start_export(move |dir| {
+        self.ui.on_start_export(move |dir, quality| {
             for (i, image_info) in state.lock().unwrap().photos_infos.iter().enumerate() {
                 if matches!(image_info.filter_settings.filter, FilterState::Accepted) {
                     sender
-                        .send(Commands::ExportImage(i as u32, dir.to_string().into()).request())
+                        .send(
+                            Commands::ExportImage(i as u32, dir.to_string().into(), quality as u8)
+                                .request(),
+                        )
                         .unwrap();
                 }
             }

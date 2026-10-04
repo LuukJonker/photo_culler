@@ -82,12 +82,17 @@ impl Worker {
         Ok(ResponseData::Directory(length as u32))
     }
 
-    fn export_image(&self, index: u32, output_dir_path: PathBuf) -> Result<(), ModelError> {
+    fn export_image(
+        &self,
+        index: u32,
+        output_dir_path: PathBuf,
+        quality: u8,
+    ) -> Result<(), ModelError> {
         let mut browser_lock = self.browser.write().unwrap();
         let browser = browser_lock.as_mut().unwrap();
 
         let container = browser.mut_at_index(index as usize);
-        container.export(&output_dir_path)?;
+        container.export(&output_dir_path, quality)?;
 
         Ok(())
     }
@@ -103,8 +108,8 @@ impl Worker {
 
             Commands::LoadDirectory(path) => ResponseAction::Respond(self.load_directory(path)),
 
-            Commands::ExportImage(index, output_dir_path) => {
-                if let Err(err) = self.export_image(index, output_dir_path) {
+            Commands::ExportImage(index, output_dir_path, quality) => {
+                if let Err(err) = self.export_image(index, output_dir_path, quality) {
                     return ResponseAction::Respond(Err(err));
                 }
 

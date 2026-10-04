@@ -44,7 +44,7 @@ export component AppWindow inherits Window {
     callback clear_filter();
     callback scherm_photo(bool);
     callback set_view_filter(int);
-    callback start_export(string);
+    callback start_export(string, int);
     callback browse_export_dir();
     callback browse_photos_dir();
 
@@ -205,9 +205,9 @@ export component AppWindow inherits Window {
             browse => {
                 root.browse_export_dir();
             }
-            export(dir) => {
+            export(dir, quality) => {
                 root.show_export_popup = false;
-                root.start_export(dir);
+                root.start_export(dir, quality);
             }
         }
     }
