@@ -2,6 +2,7 @@
 name = "photo_culler"
 version = "0.1.0"
 edition = "2024"
+default-run = "photo_culler"
 
 [package.metadata.packager]
 product-name = "Green Room"
@@ -11,11 +12,7 @@ description = "High-performance, GPU-accelerated RAW photo culling and editing."
 # homepage = "https://github.com/LuukJonker/green_room"
 
 # Universal Asset Paths
-icons = [
-    "assets/icon.icns", 
-    "assets/icon.ico", 
-    "assets/icon.png"
-]
+icons = ["assets/icon.icns", "assets/icon.ico", "assets/icon.png"]
 
 # Targeted Installers
 # formats = ["app", "dmg", "nsis", "deb"]
