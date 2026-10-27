@@ -1,4 +1,5 @@
 use crossbeam::channel::{Receiver, Sender};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
@@ -87,12 +88,20 @@ impl Worker {
         index: u32,
         output_dir_path: PathBuf,
         quality: u8,
+        copy_only: bool,
     ) -> Result<(), ModelError> {
         let mut browser_lock = self.browser.write().unwrap();
         let browser = browser_lock.as_mut().unwrap();
 
         let container = browser.mut_at_index(index as usize);
-        container.export(&output_dir_path, quality)?;
+        if copy_only {
+            fs::copy(
+                container.path(),
+                output_dir_path.join(container.path().file_name().unwrap()),
+            )?;
+        } else {
+            container.export(&output_dir_path, quality)?;
+        }
 
         Ok(())
     }
@@ -108,8 +117,8 @@ impl Worker {
 
             Commands::LoadDirectory(path) => ResponseAction::Respond(self.load_directory(path)),
 
-            Commands::ExportImage(index, output_dir_path, quality) => {
-                if let Err(err) = self.export_image(index, output_dir_path, quality) {
+            Commands::ExportImage(index, output_dir_path, quality, cull) => {
+                if let Err(err) = self.export_image(index, output_dir_path, quality, cull) {
                     return ResponseAction::Respond(Err(err));
                 }
 

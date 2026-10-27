@@ -1,9 +1,15 @@
-import { Button, LineEdit, GroupBox, SpinBox } from "std-widgets.slint";
+import {
+    Button,
+    LineEdit,
+    GroupBox,
+    SpinBox,
+    CheckBox,
+} from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 export component ExportPopup inherits Rectangle {
     callback close();
-    callback export(string, int);
+    callback export(string, int, bool);
     callback browse();
 
     in-out property <string> output-directory: "";
@@ -83,6 +89,19 @@ export component ExportPopup inherits Rectangle {
                 }
             }
 
+            HorizontalLayout {
+                alignment: end;
+                spacing: 10px;
+
+                Text {
+                    text: "Cull only";
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+
+                cull_only_box := CheckBox { }
+            }
+
             Rectangle {
                 vertical-stretch: 1;
             }
@@ -101,7 +120,7 @@ export component ExportPopup inherits Rectangle {
                     text: "Export";
                     primary: true;
                     enabled: root.output-directory != "";
-                    clicked => { root.export(root.output-directory, root.quality); }
+                    clicked => { root.export(root.output-directory, root.quality, cull_only_box.checked); }
                     width: 150px;
                 }
             }

@@ -379,13 +379,18 @@ impl ViewModel {
 
         let state = self.appstate.clone();
         let sender = self.sender.clone();
-        self.ui.on_start_export(move |dir, quality| {
+        self.ui.on_start_export(move |dir, quality, cull_only| {
             for (i, image_info) in state.lock().unwrap().photos_infos.iter().enumerate() {
                 if matches!(image_info.filter_settings.filter, FilterState::Accepted) {
                     sender
                         .send(
-                            Commands::ExportImage(i as u32, dir.to_string().into(), quality as u8)
-                                .request(),
+                            Commands::ExportImage(
+                                i as u32,
+                                dir.to_string().into(),
+                                quality as u8,
+                                cull_only,
+                            )
+                            .request(),
                         )
                         .unwrap();
                 }

@@ -134,7 +134,7 @@ pub enum Commands {
     LoadThumbnail(u32),
 
     /// Export the image at the specified index to the given path.
-    ExportImage(u32, PathBuf, u8),
+    ExportImage(u32, PathBuf, u8, bool),
 
     /// Adjust image settings (brightness, contrast, etc.) for an image.
     AdjustImagesettings(u32, ImageSettings),
