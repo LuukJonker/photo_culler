@@ -8,6 +8,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fs::{self, File},
+    io::BufWriter,
     path::{Path, PathBuf},
 };
 
@@ -108,9 +109,11 @@ where
     T: Serialize,
 {
     let file_path = get_or_create_collection_file(root_folder)?;
-    let file = File::create(file_path)?;
 
-    serde_json::to_writer(file, &contents)?;
+    let file = File::create(&file_path)?;
+    let writer = BufWriter::new(file);
+
+    serde_json::to_writer(writer, &contents)?;
 
     Ok(())
 }
